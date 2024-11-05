@@ -21,7 +21,6 @@ if "last_data_date" not in st.session_state:
 if "stock_data" not in st.session_state:
     st.session_state.stock_data = pd.DataFrame()
 
-
 #endregion
 
 #### Functions ####
@@ -95,26 +94,33 @@ else:
 # Display stock data
 nvidia_data = st.session_state.stock_data
 
-# User selection for time range
-time_range = st.selectbox("Select Time Range:", ["Full Range", "Last 5 Years", "Last 3 Years", "Last Year", "Last 6 Months", "Last Month"])
+# Check if data is available before proceeding
+if not nvidia_data.empty:
+    # User selection for time range
+    time_range = st.selectbox("Select Time Range:", ["Full Range", "Last 5 Years", "Last 3 Years", "Last Year", "Last 6 Months", "Last Month"])
 
-# Filtering data based on user selection
-today = datetime.now()
-if time_range == "Full Range":
-    filtered_data = nvidia_data
-elif time_range == "Last 5 Years":
-    filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(years=5))]
-elif time_range == "Last 3 Years":
-    filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(years=3))]
-elif time_range == "Last Year":
-    filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(years=1))]
-elif time_range == "Last 6 Months":
-    filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(months=6))]
-elif time_range == "Last Month":
-    filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(months=1))]
+    # Filtering data based on user selection
+    today = datetime.now()
+    if time_range == "Full Range":
+        filtered_data = nvidia_data
+    elif time_range == "Last 5 Years":
+        filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(years=5))]
+    elif time_range == "Last 3 Years":
+        filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(years=3))]
+    elif time_range == "Last Year":
+        filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(years=1))]
+    elif time_range == "Last 6 Months":
+        filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(months=6))]
+    elif time_range == "Last Month":
+        filtered_data = nvidia_data[nvidia_data.index >= (today - pd.DateOffset(months=1))]
 
-# Plotting the filtered data
-st.line_chart(filtered_data["Close"])
+    # Plotting the filtered data
+    if "Close" in filtered_data.columns:
+        st.line_chart(filtered_data["Close"])
+    else:
+        st.error("'Close' column not found in the data.")
+else:
+    st.error("No stock data available to display.")
 
 #endregion
 
