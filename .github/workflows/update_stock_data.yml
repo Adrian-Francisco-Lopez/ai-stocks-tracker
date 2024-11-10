@@ -1,0 +1,30 @@
+name: Update Stock Data Daily
+
+on:
+  schedule:
+    - cron: '31 14 * * 1-5'  # Every weekday at 9:30 AM EST (NASDAQ opening time)
+    - cron: '31 13 * * 1-5'  # For EDT (daylight saving time, from spring to fall)
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run update script
+      env:
+        FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+      run: |
+        python update_stock_data.py
