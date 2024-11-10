@@ -1,0 +1,40 @@
+name: Update Stock Data Daily
+
+on:
+  schedule:
+    - cron: '31 14 * * 1-5'  # Every weekday at 9:30 AM EST (NASDAQ opening time)
+    - cron: '31 13 * * 1-5'  # For EDT (daylight saving time, from spring to fall)
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run update script
+      env:
+        FIREBASE_TYPE: ${{ secrets.FIREBASE_TYPE }}
+        FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        FIREBASE_PRIVATE_KEY_ID: ${{ secrets.FIREBASE_PRIVATE_KEY_ID }}
+        FIREBASE_PRIVATE_KEY: ${{ secrets.FIREBASE_PRIVATE_KEY }}
+        FIREBASE_CLIENT_EMAIL: ${{ secrets.FIREBASE_CLIENT_EMAIL }}
+        FIREBASE_CLIENT_ID: ${{ secrets.FIREBASE_CLIENT_ID }}
+        FIREBASE_AUTH_URI: ${{ secrets.FIREBASE_AUTH_URI }}
+        FIREBASE_TOKEN_URI: ${{ secrets.FIREBASE_TOKEN_URI }}
+        FIREBASE_AUTH_PROVIDER_CERT_URL: ${{ secrets.FIREBASE_AUTH_PROVIDER_CERT_URL }}
+        FIREBASE_CLIENT_CERT_URL: ${{ secrets.FIREBASE_CLIENT_CERT_URL }}
+        TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+      run: |
+        python update_stock_data.py
