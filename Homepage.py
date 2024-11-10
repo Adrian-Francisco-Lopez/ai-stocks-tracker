@@ -3,9 +3,29 @@ import requests
 import pandas as pd
 from datetime import datetime
 import matplotlib.pyplot as plt
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 #### Initializing variables ####
 #region
+
+# Access Firebase credentials from Streamlit secrets
+if not firebase_admin._apps:
+    cred = credentials.Certificate({
+        "type": st.secrets["firebase"]["type"],
+        "project_id": st.secrets["firebase"]["project_id"],
+        "private_key_id": st.secrets["firebase"]["private_key_id"],
+        "private_key": st.secrets["firebase"]["private_key"],
+        "client_email": st.secrets["firebase"]["client_email"],
+        "client_id": st.secrets["firebase"]["client_id"],
+        "auth_uri": st.secrets["firebase"]["auth_uri"],
+        "token_uri": st.secrets["firebase"]["token_uri"],
+        "auth_provider_x509_cert_url": st.secrets["firebase"]["auth_provider_x509_cert_url"],
+        "client_x509_cert_url": st.secrets["firebase"]["client_x509_cert_url"]
+    })
+    firebase_admin.initialize_app(cred)
+
+db = firestore.client()
 
 # Access the API key from the secrets.toml file
 TWELVE_DATA_API_KEY = st.secrets["twelve_data"]["api_key"]
@@ -22,13 +42,22 @@ if "stock_data" not in st.session_state:
 # Fetch stock data from Twelve Data API
 def get_stock_data(symbol, api_key):
     """
-    This function fetches stock data from the Twelve Data API.
+    This function fetches stock data from Firebase, if not, fecthes from the Twelve Data API and stores it in Firebase
     """
+    # Firestore reference
+    doc_ref = db.collection("stock_data").document(symbol)
+
+    # Check if data already exists in Firestore
+    doc = doc_ref.get()
+    if doc.exists:
+        return pd.DataFrame(doc.to_dict())
+
+    # Fetch from Twelve Data API if not available
     url = f'https://api.twelvedata.com/time_series?symbol={symbol}&interval=1day&outputsize=5000&apikey={api_key}'
     response = requests.get(url)
     data = response.json()
-    
-    # Convert data to DataFrame
+
+    # Convert data to DataFrame and store in Firestore
     if "values" in data:
         values = data["values"]
         df = pd.DataFrame(values)
@@ -41,12 +70,13 @@ def get_stock_data(symbol, api_key):
             "volume": "Volume"
         })
 
-        # Convert 'Date' to datetime and sort by date
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values(by="Date")
         df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.name != 'Date' else x)
         df.set_index("Date", inplace=True)
-        
+
+        # Store in Firestore
+        doc_ref.set(df.to_dict())
         return df
     else:
         st.error("Error retrieving data. Please try again later.")
