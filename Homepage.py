@@ -2,6 +2,7 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime
+import matplotlib.pyplot as plt
 
 #### Initializing variables ####
 #region
@@ -75,7 +76,7 @@ for stock_name, stock_symbol in stocks.items():
 
     # Check if data is available before proceeding
     if not stock_data.empty:
-        with st.container():
+        with st.container(border=True):
             st.write(f"### {stock_name} ({stock_symbol}) Stock Price")
             
             # User selection for time range
@@ -102,8 +103,20 @@ for stock_name, stock_symbol in stocks.items():
             elif time_range == "Last Week":
                 filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(weeks=1))]
 
-            # Plotting the filtered data inside a container with a border
-            st.line_chart(filtered_data["Close"])
+            # Plotting the filtered data inside a container with a border and adjusting Y-axis limits
+            fig, ax = plt.subplots()
+            fig.patch.set_facecolor('black')
+            ax.set_facecolor('black')
+            ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
+            ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
+            ax.set_xlabel("Date", color='white')
+            ax.set_ylabel("Price (USD)", color='white')
+            ax.legend()
+            ax.grid(True, color='gray')
+            ax.set_ylim([filtered_data["Close"].min() * 0.95, filtered_data["Close"].max() * 1.05])  # Adjust Y-axis limits to zoom properly
+            ax.tick_params(axis='x', colors='white', rotation=45)
+            ax.tick_params(axis='y', colors='white')
+            st.pyplot(fig)
     else:
         st.error(f"No stock data available for {stock_name}.")
 
