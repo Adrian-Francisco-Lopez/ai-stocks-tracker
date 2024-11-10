@@ -8,15 +8,15 @@ from datetime import datetime
 # Access Firebase credentials from environment variables
 if not firebase_admin._apps:
     cred = credentials.Certificate({
-        "type": "service_account",
+        "type": os.getenv("FIREBASE_TYPE"),
         "project_id": os.getenv("FIREBASE_PROJECT_ID"),
         "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-        "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace("\\n", "\n"),
+        "private_key": os.getenv("FIREBASE_PRIVATE_KEY"), 
         "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
         "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-        "token_uri": "https://oauth2.googleapis.com/token",
-        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
+        "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
+        "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_CERT_URL"),
         "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL")
     })
     firebase_admin.initialize_app(cred)
@@ -77,7 +77,24 @@ def update_stock_data(symbol, api_key):
 
 # Update the list of stocks
 stocks = {
-    "NVIDIA": "NVDA"
+    "NVIDIA": "NVDA",
+    "Advanced Micro Devices": "AMD",
+    "Micron Technology": "MU",
+    "Astera Labs Inc": "ALAB",
+    "Arm": "ARM",
+    "Alphabet 1": "GOOGL",
+    "Alphabet 2": "GOOG",
+    "Broadcom Inc.": "AVGO",
+    "Amazon": "AMZN",
+    "NXP Semiconductors": "NXPI",
+    "Microsoft": "MSFT",
+    "TSMC": "2330",
+    "SK Hynix": "000660",
+    "Meta Platforms": "META",
+    "Palantir Technologies": "PLTR",
+    "Marvell Technology Inc": "MRVL",
+    "CrowdStrike": "CRWD",
+    "Arista": "ANED"
 }
 
 # Update each stock's data

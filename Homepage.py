@@ -34,6 +34,28 @@ TWELVE_DATA_API_KEY = st.secrets["twelve_data"]["api_key"]
 if "stock_data" not in st.session_state:
     st.session_state.stock_data = {}
 
+# Dictionary of stocks
+stocks = {
+    "NVIDIA": "NVDA",
+    "Advanced Micro Devices": "AMD",
+    "Micron Technology": "MU",
+    "Astera Labs Inc": "ALAB",
+    "Arm": "ARM",
+    "Alphabet 1": "GOOGL",
+    "Alphabet 2": "GOOG",
+    "Broadcom Inc.": "AVGO",
+    "Amazon": "AMZN",
+    "NXP Semiconductors": "NXPI",
+    "Microsoft": "MSFT",
+    "TSMC": "2330",
+    "SK Hynix": "000660",
+    "Meta Platforms": "META",
+    "Palantir Technologies": "PLTR",
+    "Marvell Technology Inc": "MRVL",
+    "CrowdStrike": "CRWD",
+    "Arista": "ANED"
+}
+
 #endregion
 
 #### Functions ####
@@ -86,10 +108,6 @@ def get_stock_data(symbol, api_key):
 
 #### Main app logic ####
 #region
-# Dictionary of stocks
-stocks = {
-    "NVIDIA": "NVDA"
-}
 
 # Title of the webpage
 st.set_page_config(page_title="AI-related Stock Tracker")
