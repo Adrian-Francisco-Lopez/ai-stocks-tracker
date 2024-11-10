@@ -5,6 +5,9 @@ on:
     - cron: '31 14 * * 1-5'  # Every weekday at 9:30 AM EST (NASDAQ opening time)
     - cron: '31 13 * * 1-5'  # For EDT (daylight saving time, from spring to fall)
 
+  # Allow manual triggering of the workflow
+  workflow_dispatch:
+
 jobs:
   update:
     runs-on: ubuntu-latest
