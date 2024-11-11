@@ -3,6 +3,8 @@ import requests
 import pandas as pd
 import firebase_admin
 from firebase_admin import credentials, firestore
+import json
+import time
 from datetime import datetime
 
 # Debug
@@ -10,19 +12,18 @@ print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
 print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
 print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
 
-
 # Access Firebase credentials from environment variables
 if not firebase_admin._apps:
     cred = credentials.Certificate({
-        "type": os.getenv("FIREBASE_TYPE"),
+        "type": "service_account",
         "project_id": os.getenv("FIREBASE_PROJECT_ID"),
         "private_key_id": os.getenv("FIREBASE_PRIVATE_KEY_ID"),
-        "private_key": os.getenv("FIREBASE_PRIVATE_KEY"), 
+        "private_key": os.getenv("FIREBASE_PRIVATE_KEY").replace('\\n', '\n'), 
         "client_email": os.getenv("FIREBASE_CLIENT_EMAIL"),
         "client_id": os.getenv("FIREBASE_CLIENT_ID"),
-        "auth_uri": os.getenv("FIREBASE_AUTH_URI"),
-        "token_uri": os.getenv("FIREBASE_TOKEN_URI"),
-        "auth_provider_x509_cert_url": os.getenv("FIREBASE_AUTH_PROVIDER_CERT_URL"),
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
         "client_x509_cert_url": os.getenv("FIREBASE_CLIENT_CERT_URL")
     })
     firebase_admin.initialize_app(cred)
@@ -31,20 +32,14 @@ db = firestore.client()
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
 # Function to fetch and update stock data in Firestore
-# Function to fetch and update stock data in Firestore
+# Function to fetch and store stock data as JSON in Firestore
 def update_stock_data(symbol, api_key):
     """
     Updates stock data in Firebase Firestore.
-    Only adds new entries and does not overwrite existing ones.
+    Fetches data from Twelve Data API and stores it as a JSON document in Firestore.
     """
-    # Firestore reference for the collection of each stock
-    stock_collection_ref = db.collection("stock_data").document(symbol).collection("daily_data")
-
-    # Fetch current data from Firestore
-    existing_dates = set()
-    docs = stock_collection_ref.stream()
-    for doc in docs:
-        existing_dates.add(doc.id)  # Store document IDs (dates) that are already in Firestore
+    # Firestore reference for the JSON document of each stock
+    stock_doc_ref = db.collection("stock_data_json").document(symbol)
 
     # Fetch from Twelve Data API
     url = f'https://api.twelvedata.com/time_series?symbol={symbol}&interval=1day&outputsize=5000&apikey={api_key}'
@@ -68,13 +63,13 @@ def update_stock_data(symbol, api_key):
         df = df.sort_values(by="Date")
         df = df.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name != 'Date' else x)
 
-        # Iterate through the data and write each row as a separate document
-        for _, row in df.iterrows():
-            date_str = row['Date'].strftime("%Y-%m-%d")
-            if date_str not in existing_dates:  # Only add new data
-                doc_ref = stock_collection_ref.document(date_str)
-                row_data = row.drop('Date').dropna().to_dict()
-                doc_ref.set(row_data)
+        # Convert DataFrame to JSON format
+        data_json = df.to_json(orient="records")
+
+        # Store JSON data in Firestore
+        stock_doc_ref.set({"data": data_json})
+    else:
+        print(f"Error retrieving data for {symbol}. Response: {data}")
 
 # Update the list of stocks
 stocks = {
@@ -89,8 +84,6 @@ stocks = {
     "Amazon": "AMZN",
     "NXP Semiconductors": "NXPI",
     "Microsoft": "MSFT",
-    "TSMC": "2330",
-    "SK Hynix": "000660",
     "Meta Platforms": "META",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
@@ -101,3 +94,6 @@ stocks = {
 # Update each stock's data
 for stock_name, stock_symbol in stocks.items():
     update_stock_data(stock_symbol, TWELVE_DATA_API_KEY)
+    print(f"updating {stock_symbol}...")
+    time.sleep(8)  # Delay to avoid exceeding API rate limit
+

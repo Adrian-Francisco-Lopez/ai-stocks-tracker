@@ -5,6 +5,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import firebase_admin
 from firebase_admin import credentials, firestore
+import json
 
 #### Initializing variables ####
 #region
@@ -47,8 +48,6 @@ stocks = {
     "Amazon": "AMZN",
     "NXP Semiconductors": "NXPI",
     "Microsoft": "MSFT",
-    "TSMC": "2330",
-    "SK Hynix": "000660",
     "Meta Platforms": "META",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
@@ -64,27 +63,24 @@ stocks = {
 # Fetch stock data from Firebase Firestore
 def get_stock_data_from_firebase(symbol):
     """
-    This function fetches stock data from Firebase Firestore.
+    This function fetches stock data from Firebase Firestore as a JSON document.
     """
-    # Firestore reference for the collection of each stock
-    stock_collection_ref = db.collection("stock_data").document(symbol).collection("daily_data")
+    # Firestore reference for the JSON document of each stock
+    stock_doc_ref = db.collection("stock_data_json").document(symbol)
 
-    # Fetch all documents from the collection
-    docs = stock_collection_ref.stream()
-    data = []
-    for doc in docs:
-        doc_data = doc.to_dict()
-        doc_data["Date"] = pd.to_datetime(doc.id)  # Use the document ID (date) as the "Date" field
-        data.append(doc_data)
-
-    # Convert to DataFrame
-    if data:
-        df = pd.DataFrame(data)
-        df.set_index("Date", inplace=True)
-        df = df.sort_index()
-        return df
-    else:
-        return pd.DataFrame()
+    # Fetch the document
+    doc = stock_doc_ref.get()
+    if doc.exists:
+        json_data = doc.to_dict().get("data", "")
+        if json_data:
+            # Load JSON data into DataFrame
+            data = json.loads(json_data)
+            df = pd.DataFrame(data)
+            df["Date"] = pd.to_datetime(df["Date"])
+            df.set_index("Date", inplace=True)
+            df = df.sort_index()
+            return df
+    return pd.DataFrame()
 
 # Fetch stock data from Twelve Data API
 old_function = """def get_stock_data(symbol, api_key):
