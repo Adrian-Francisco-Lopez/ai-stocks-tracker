@@ -62,6 +62,7 @@ def update_stock_data(symbol, api_key):
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values(by="Date")
         df = df.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name != 'Date' else x)
+        df["Date"] = df["Date"].dt.strftime('%Y-%m-%d')  # Convert Date back to string format
 
         # Convert DataFrame to JSON format
         data_json = df.to_json(orient="records")
