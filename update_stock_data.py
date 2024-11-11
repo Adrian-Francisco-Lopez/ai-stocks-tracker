@@ -5,6 +5,12 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from datetime import datetime
 
+# Debug
+print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
+print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
+print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
+
+
 # Access Firebase credentials from environment variables
 if not firebase_admin._apps:
     cred = credentials.Certificate({
@@ -25,22 +31,20 @@ db = firestore.client()
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
 # Function to fetch and update stock data in Firestore
+# Function to fetch and update stock data in Firestore
 def update_stock_data(symbol, api_key):
     """
     Updates stock data in Firebase Firestore.
     Only adds new entries and does not overwrite existing ones.
     """
-    # Firestore reference
-    doc_ref = db.collection("stock_data").document(symbol)
+    # Firestore reference for the collection of each stock
+    stock_collection_ref = db.collection("stock_data").document(symbol).collection("daily_data")
 
     # Fetch current data from Firestore
-    doc = doc_ref.get()
-    if doc.exists:
-        existing_data = pd.DataFrame(doc.to_dict())
-        last_date = pd.to_datetime(existing_data.index).max()
-    else:
-        existing_data = pd.DataFrame()
-        last_date = None
+    existing_dates = set()
+    docs = stock_collection_ref.stream()
+    for doc in docs:
+        existing_dates.add(doc.id)  # Store document IDs (dates) that are already in Firestore
 
     # Fetch from Twelve Data API
     url = f'https://api.twelvedata.com/time_series?symbol={symbol}&interval=1day&outputsize=5000&apikey={api_key}'
@@ -59,21 +63,18 @@ def update_stock_data(symbol, api_key):
             "volume": "Volume"
         })
 
+        # Ensure all data is in the correct format
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values(by="Date")
-        df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.name != 'Date' else x)
-        df.set_index("Date", inplace=True)
+        df = df.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name != 'Date' else x)
 
-        # Filter new data
-        if last_date:
-            new_data = df[df.index > last_date]
-        else:
-            new_data = df
-
-        # Update Firestore if there is new data
-        if not new_data.empty:
-            updated_data = pd.concat([existing_data, new_data])
-            doc_ref.set(updated_data.to_dict())
+        # Iterate through the data and write each row as a separate document
+        for _, row in df.iterrows():
+            date_str = row['Date'].strftime("%Y-%m-%d")
+            if date_str not in existing_dates:  # Only add new data
+                doc_ref = stock_collection_ref.document(date_str)
+                row_data = row.drop('Date').dropna().to_dict()
+                doc_ref.set(row_data)
 
 # Update the list of stocks
 stocks = {

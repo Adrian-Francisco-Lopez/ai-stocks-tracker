@@ -61,11 +61,33 @@ stocks = {
 #### Functions ####
 #region
 
+# Fetch stock data from Firebase Firestore
+def get_stock_data_from_firebase(symbol):
+    """
+    This function fetches stock data from Firebase Firestore.
+    """
+    # Firestore reference for the collection of each stock
+    stock_collection_ref = db.collection("stock_data").document(symbol).collection("daily_data")
+
+    # Fetch all documents from the collection
+    docs = stock_collection_ref.stream()
+    data = []
+    for doc in docs:
+        doc_data = doc.to_dict()
+        doc_data["Date"] = pd.to_datetime(doc.id)  # Use the document ID (date) as the "Date" field
+        data.append(doc_data)
+
+    # Convert to DataFrame
+    if data:
+        df = pd.DataFrame(data)
+        df.set_index("Date", inplace=True)
+        df = df.sort_index()
+        return df
+    else:
+        return pd.DataFrame()
+
 # Fetch stock data from Twelve Data API
-def get_stock_data(symbol, api_key):
-    """
-    This function fetches stock data from Firebase, if not, fecthes from the Twelve Data API and stores it in Firebase
-    """
+old_function = """def get_stock_data(symbol, api_key):
     # Firestore reference
     doc_ref = db.collection("stock_data").document(symbol)
 
@@ -102,7 +124,7 @@ def get_stock_data(symbol, api_key):
         return df
     else:
         st.error("Error retrieving data. Please try again later.")
-        return pd.DataFrame()
+        return pd.DataFrame()"""
 
 #endregion
 
@@ -115,16 +137,16 @@ st.title("AI-related Stock Tracker")
 
 # Loop through all stocks
 for stock_name, stock_symbol in stocks.items():
-    # Fetch stock data
+    # Fetch stock data from Firebase
     if stock_symbol not in st.session_state.stock_data:
-        st.session_state.stock_data[stock_symbol] = get_stock_data(stock_symbol, TWELVE_DATA_API_KEY)
+        st.session_state.stock_data[stock_symbol] = get_stock_data_from_firebase(stock_symbol)
 
     # Display stock data
     stock_data = st.session_state.stock_data[stock_symbol]
 
     # Check if data is available before proceeding
     if not stock_data.empty:
-        with st.container(border=True):
+        with st.container():
             st.write(f"### {stock_name} ({stock_symbol}) Stock Price")
             
             # User selection for time range
