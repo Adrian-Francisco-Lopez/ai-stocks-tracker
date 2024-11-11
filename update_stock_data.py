@@ -88,8 +88,7 @@ stocks = {
     "Meta Platforms": "META",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
-    "CrowdStrike": "CRWD",
-    "Arista": "ANED"
+    "CrowdStrike": "CRWD"
 }
 
 # Update each stock's data

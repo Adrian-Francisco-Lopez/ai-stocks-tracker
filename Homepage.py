@@ -51,8 +51,7 @@ stocks = {
     "Meta Platforms": "META",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
-    "CrowdStrike": "CRWD",
-    "Arista": "ANED"
+    "CrowdStrike": "CRWD"
 }
 
 #endregion
@@ -142,7 +141,10 @@ for stock_name, stock_symbol in stocks.items():
 
     # Check if data is available before proceeding
     if not stock_data.empty:
-        with st.container():
+        # Use Open price if Close price is not available
+        stock_data['Close'] = stock_data['Close'].fillna(stock_data['Open'])
+
+        with st.container(border=True):
             st.write(f"### {stock_name} ({stock_symbol}) Stock Price")
             
             # User selection for time range
@@ -183,6 +185,13 @@ for stock_name, stock_symbol in stocks.items():
             ax.tick_params(axis='x', colors='white', rotation=45)
             ax.tick_params(axis='y', colors='white')
             st.pyplot(fig)
+
+            # Display last data point information
+            last_data_point = filtered_data.iloc[-1]
+            last_date = last_data_point.name.strftime("%Y-%m-%d")
+            last_value = last_data_point["Close"]
+            value_type = "Close value" if "Close" in filtered_data.columns and not pd.isna(last_data_point["Close"]) else "Open value"
+            st.write(f"**Last data point:** {last_date} - {value_type}: {last_value}")
     else:
         st.error(f"No stock data available for {stock_name}.")
 
