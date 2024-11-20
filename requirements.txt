@@ -3,3 +3,4 @@ alpha_vantage
 matplotlib
 numpy
 firebase-admin
+scipy

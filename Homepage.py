@@ -6,6 +6,9 @@ import matplotlib.pyplot as plt
 import firebase_admin
 from firebase_admin import credentials, firestore
 import json
+from scipy.optimize import curve_fit
+import numpy as np
+from scipy.interpolate import interp1d
 
 #### Initializing variables ####
 #region
@@ -56,6 +59,86 @@ stocks = {
 
 #endregion
 
+#### Fitting ####
+#region
+# Define different fitting functions
+def linear_model(x, a, baseline):
+    return a * x + baseline
+
+def exponential_model(x, a, b, baseline):
+    return a * np.exp(b * x) + baseline
+
+def logistic_model(x, L, k, x0, baseline):
+    return L / (1 + np.exp(-k * (x - x0))) + baseline
+
+# Wrapper function for fitting
+def fit_stock_data(x_data, y_data, model, p0):
+    """
+    Fit stock data using a specified model.
+
+    Parameters:
+    - x_data: The x-axis data (e.g., days since start).
+    - y_data: The y-axis data (e.g., stock close values).
+    - model: The fitting model function (e.g., linear_model).
+    - p0: Initial parameter estimates (list).
+
+    Returns:
+    - Fitted parameters (list).
+    """
+    try:
+        params, _ = curve_fit(model, x_data, y_data, p0=p0, maxfev=2000)
+        return params
+    except RuntimeError as e:
+        print(f"An error occurred during fitting: {e}")
+        return None
+
+# Fetch fitting parameters from Firebase Firestore
+def get_fitting_params(symbol, model_type):
+    """
+    Fetch fitting parameters from Firebase Firestore for a given stock and model type.
+    """
+    fitting_doc_ref = db.collection("fitting_params").document(f"{symbol}_{model_type}")
+    doc = fitting_doc_ref.get()
+    if doc.exists:
+        params = doc.to_dict().get("params", [])
+        start_point = doc.to_dict().get("start_point", 0)  # Default to 0 if not specified
+        return params, start_point
+    return [], 0
+
+# Update fitting parameters in Firebase Firestore
+def update_fitting_params(symbol, model_type, params, start_point=None):
+    """
+    Update fitting parameters in Firebase Firestore for a given stock and model type.
+    """
+    # Convert numpy array to list if needed
+    params_list = params.tolist() if isinstance(params, np.ndarray) else params
+
+    # Prepare the data to store in Firebase
+    data_to_store = {"params": params_list}
+    if start_point is not None:  # Only add start_point if it's relevant
+        data_to_store["start_point"] = start_point
+
+    # Update Firebase
+    fitting_doc_ref = db.collection("fitting_params").document(f"{symbol}_{model_type}")
+    fitting_doc_ref.set(data_to_store)
+
+# Smooth bumpy lines by interpolating data
+def generate_smooth_fit_line(x_data, dates, params, model, num_points=1000):
+    # Generate finer x_data
+    x_fine = np.linspace(x_data.min(), x_data.max(), num_points)
+    # Compute the model values at x_fine
+    y_fine = model(x_fine, *params)
+    # Map x_fine to dates using interpolation
+    #dates_numeric = dates.astype(np.int64)
+    dates_numeric = dates.view('int64')  # Safe conversion to int64
+    x_to_date = interp1d(x_data, dates_numeric, kind='linear', bounds_error=False, fill_value='extrapolate')
+    dates_fine = pd.to_datetime(x_to_date(x_fine))
+    return dates_fine, y_fine
+
+
+#endregion
+
+
 #### Functions ####
 #region
 
@@ -81,54 +164,14 @@ def get_stock_data_from_firebase(symbol):
             return df
     return pd.DataFrame()
 
-# Fetch stock data from Twelve Data API
-old_function = """def get_stock_data(symbol, api_key):
-    # Firestore reference
-    doc_ref = db.collection("stock_data").document(symbol)
-
-    # Check if data already exists in Firestore
-    doc = doc_ref.get()
-    if doc.exists:
-        return pd.DataFrame(doc.to_dict())
-
-    # Fetch from Twelve Data API if not available
-    url = f'https://api.twelvedata.com/time_series?symbol={symbol}&interval=1day&outputsize=5000&apikey={api_key}'
-    response = requests.get(url)
-    data = response.json()
-
-    # Convert data to DataFrame and store in Firestore
-    if "values" in data:
-        values = data["values"]
-        df = pd.DataFrame(values)
-        df = df.rename(columns={
-            "datetime": "Date",
-            "open": "Open",
-            "high": "High",
-            "low": "Low",
-            "close": "Close",
-            "volume": "Volume"
-        })
-
-        df["Date"] = pd.to_datetime(df["Date"])
-        df = df.sort_values(by="Date")
-        df = df.apply(lambda x: pd.to_numeric(x, errors='ignore') if x.name != 'Date' else x)
-        df.set_index("Date", inplace=True)
-
-        # Store in Firestore
-        doc_ref.set(df.to_dict())
-        return df
-    else:
-        st.error("Error retrieving data. Please try again later.")
-        return pd.DataFrame()"""
-
 #endregion
 
 #### Main app logic ####
 #region
 
 # Title of the webpage
-st.set_page_config(page_title="AI-related Stock Tracker")
-st.title("AI-related Stock Tracker")
+st.set_page_config(page_title="Stock Tracker")
+st.title("Stock Tracker & estimated fitting")
 
 # Loop through all stocks
 for stock_name, stock_symbol in stocks.items():
@@ -171,11 +214,74 @@ for stock_name, stock_symbol in stocks.items():
             elif time_range == "Last Week":
                 filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(weeks=1))]
 
+            # Prepare data for fitting
+            x_data = np.arange(len(filtered_data))
+            y_data = filtered_data["Close"].values
+
+            # Linear fitting (applies to filtered data based on selected time range, excluding Full Range, Last 5 Years, Last 3 Years)
+            if time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
+                linear_initial_params, start_point_linear = get_fitting_params(stock_symbol, "linear")
+                if linear_initial_params:
+                    # Fit using the fit_stock_data function on the filtered data
+                    linear_params = fit_stock_data(x_data, y_data, linear_model, linear_initial_params)
+
+                    # Update Firebase with new fitting parameters
+                    update_fitting_params(stock_symbol, "linear", linear_params)
+
+                    # Generate smooth fit line for plotting
+                    dates_fine_linear, y_fine_linear = generate_smooth_fit_line(x_data, filtered_data.index, linear_params, linear_model, 4)
+                    #st.write(f"x_data: {x_data} - filtered_data.index: {filtered_data.index} - y_data: {y_data} /n dates_fine_linear: {dates_fine_linear} - y_fine_linear: {y_fine_linear}")  ######### Debug
+                    # Generate linear fit line for the filtered data
+                    #linear_fit = linear_model(x_data, *linear_params)
+                    #filtered_data["Linear Fit"] = linear_fit
+
+
+            # Exponential fitting (applies to the entire dataset, from a given start point)
+            # Here we fetch the full dataset, rather than filtered_data, to make sure it spans all available data
+            full_x_data = np.arange(len(stock_data))
+            full_y_data = stock_data["Close"].values
+
+            exp_initial_params, start_point_exp = get_fitting_params(stock_symbol, "exponential")
+            if exp_initial_params:
+                
+                # Slice the full data starting from start_point_exp
+                x_data_exp = full_x_data[start_point_exp:]
+                y_data_exp = full_y_data[start_point_exp:]
+                
+                # Fit using the fit_stock_data function
+                exp_params = fit_stock_data(x_data_exp, y_data_exp, exponential_model, exp_initial_params)
+
+                # Better not update the parameters:
+                # Update Firebase with new fitting parameters
+                #update_fitting_params(stock_symbol, "exponential", exp_params, start_point_exp)
+
+                # Generate smooth fit line for plotting
+                dates_fine_exp, y_fine_exp = generate_smooth_fit_line(x_data_exp, stock_data.index[start_point_exp:], exp_params, exponential_model, 500)
+                #st.write(f"x_data: {x_data_exp} - filtered_data.index: {filtered_data.index} - y_data: {y_data_exp} /n dates_fine_exp: {dates_fine_exp} - y_fine_exp: {y_fine_exp}")  ######### Debug
+                # Extend the fitted line over the entire dataset starting from start_point_exp
+                #exp_fit = np.full_like(full_y_data, np.nan)
+                #exp_fit[start_point_exp:] = exponential_model(x_data_exp, *exp_params)
+                #stock_data["Exponential Fit"] = exp_fit  # Note: add fit to full dataset (not filtered)
+
             # Plotting the filtered data inside a container with a border and adjusting Y-axis limits
             fig, ax = plt.subplots()
             fig.patch.set_facecolor('black')
             ax.set_facecolor('black')
             ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
+            #if "Linear Fit" in filtered_data.columns:
+                #ax.plot(filtered_data.index, filtered_data["Linear Fit"], label="Linear Fit", color='yellow', linestyle=':')
+            #if "Exponential Fit" in filtered_data.columns:
+                #ax.plot(filtered_data.index, filtered_data["Exponential Fit"], label="Exponential Fit", color='white', linestyle=':')
+            
+            if 'dates_fine_linear' in locals() and time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
+                ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
+            if 'dates_fine_exp' in locals():
+                # Filter the exponential fit to the date range of filtered_data
+                mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
+                ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='white', linestyle=':')
+                #ax.plot(dates_fine_exp, y_fine_exp, label="Exponential Fit", color='white', linestyle=':')
+
+            # set the remaining plot
             ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
             ax.set_xlabel("Date", color='white')
             ax.set_ylabel("Price (USD)", color='white')
