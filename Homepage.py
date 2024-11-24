@@ -71,20 +71,29 @@ def exponential_model(x, a, b, baseline):
 def logistic_model(x, L, k, x0, baseline):
     return L / (1 + np.exp(-k * (x - x0))) + baseline
 
-# Wrapper function for fitting
-def fit_stock_data(x_data, y_data, model, p0):
+@st.cache_data
+def fit_stock_data(x_data, y_data, model_name, p0):
     """
     Fit stock data using a specified model.
 
     Parameters:
     - x_data: The x-axis data (e.g., days since start).
     - y_data: The y-axis data (e.g., stock close values).
-    - model: The fitting model function (e.g., linear_model).
+    - model_name: The name of the fitting model ('linear' or 'exponential').
     - p0: Initial parameter estimates (list).
 
     Returns:
     - Fitted parameters (list).
     """
+    # Map the model name to the corresponding function
+    if model_name == "linear":
+        model = linear_model
+    elif model_name == "exponential":
+        model = exponential_model
+    else:
+        raise ValueError(f"Unsupported model_name: {model_name}")
+
+    # Perform the fitting
     try:
         params, _ = curve_fit(model, x_data, y_data, p0=p0, maxfev=2000)
         return params
@@ -93,6 +102,7 @@ def fit_stock_data(x_data, y_data, model, p0):
         return None
 
 # Fetch fitting parameters from Firebase Firestore
+@st.cache_data
 def get_fitting_params(symbol, model_type):
     """
     Fetch fitting parameters from Firebase Firestore for a given stock and model type.
@@ -104,23 +114,6 @@ def get_fitting_params(symbol, model_type):
         start_point = doc.to_dict().get("start_point", 0)  # Default to 0 if not specified
         return params, start_point
     return [], 0
-
-# Update fitting parameters in Firebase Firestore
-def update_fitting_params(symbol, model_type, params, start_point=None):
-    """
-    Update fitting parameters in Firebase Firestore for a given stock and model type.
-    """
-    # Convert numpy array to list if needed
-    params_list = params.tolist() if isinstance(params, np.ndarray) else params
-
-    # Prepare the data to store in Firebase
-    data_to_store = {"params": params_list}
-    if start_point is not None:  # Only add start_point if it's relevant
-        data_to_store["start_point"] = start_point
-
-    # Update Firebase
-    fitting_doc_ref = db.collection("fitting_params").document(f"{symbol}_{model_type}")
-    fitting_doc_ref.set(data_to_store)
 
 # Smooth bumpy lines by interpolating data
 def generate_smooth_fit_line(x_data, dates, params, model, num_points=1000):
@@ -135,7 +128,6 @@ def generate_smooth_fit_line(x_data, dates, params, model, num_points=1000):
     dates_fine = pd.to_datetime(x_to_date(x_fine))
     return dates_fine, y_fine
 
-
 #endregion
 
 
@@ -143,6 +135,7 @@ def generate_smooth_fit_line(x_data, dates, params, model, num_points=1000):
 #region
 
 # Fetch stock data from Firebase Firestore
+@st.cache_data
 def get_stock_data_from_firebase(symbol):
     """
     This function fetches stock data from Firebase Firestore as a JSON document.
@@ -223,18 +216,10 @@ for stock_name, stock_symbol in stocks.items():
                 linear_initial_params, start_point_linear = get_fitting_params(stock_symbol, "linear")
                 if linear_initial_params:
                     # Fit using the fit_stock_data function on the filtered data
-                    linear_params = fit_stock_data(x_data, y_data, linear_model, linear_initial_params)
-
-                    # Update Firebase with new fitting parameters
-                    update_fitting_params(stock_symbol, "linear", linear_params)
+                    linear_params = fit_stock_data(x_data, y_data, "linear", linear_initial_params)
 
                     # Generate smooth fit line for plotting
                     dates_fine_linear, y_fine_linear = generate_smooth_fit_line(x_data, filtered_data.index, linear_params, linear_model, 4)
-                    #st.write(f"x_data: {x_data} - filtered_data.index: {filtered_data.index} - y_data: {y_data} /n dates_fine_linear: {dates_fine_linear} - y_fine_linear: {y_fine_linear}")  ######### Debug
-                    # Generate linear fit line for the filtered data
-                    #linear_fit = linear_model(x_data, *linear_params)
-                    #filtered_data["Linear Fit"] = linear_fit
-
 
             # Exponential fitting (applies to the entire dataset, from a given start point)
             # Here we fetch the full dataset, rather than filtered_data, to make sure it spans all available data
@@ -249,29 +234,16 @@ for stock_name, stock_symbol in stocks.items():
                 y_data_exp = full_y_data[start_point_exp:]
                 
                 # Fit using the fit_stock_data function
-                exp_params = fit_stock_data(x_data_exp, y_data_exp, exponential_model, exp_initial_params)
-
-                # Better not update the parameters:
-                # Update Firebase with new fitting parameters
-                #update_fitting_params(stock_symbol, "exponential", exp_params, start_point_exp)
+                exp_params = fit_stock_data(x_data_exp, y_data_exp, "exponential", exp_initial_params)
 
                 # Generate smooth fit line for plotting
-                dates_fine_exp, y_fine_exp = generate_smooth_fit_line(x_data_exp, stock_data.index[start_point_exp:], exp_params, exponential_model, 500)
-                #st.write(f"x_data: {x_data_exp} - filtered_data.index: {filtered_data.index} - y_data: {y_data_exp} /n dates_fine_exp: {dates_fine_exp} - y_fine_exp: {y_fine_exp}")  ######### Debug
-                # Extend the fitted line over the entire dataset starting from start_point_exp
-                #exp_fit = np.full_like(full_y_data, np.nan)
-                #exp_fit[start_point_exp:] = exponential_model(x_data_exp, *exp_params)
-                #stock_data["Exponential Fit"] = exp_fit  # Note: add fit to full dataset (not filtered)
+                dates_fine_exp, y_fine_exp = generate_smooth_fit_line(x_data_exp, stock_data.index[start_point_exp:], exp_params, exponential_model, 1000)
 
             # Plotting the filtered data inside a container with a border and adjusting Y-axis limits
             fig, ax = plt.subplots()
             fig.patch.set_facecolor('black')
             ax.set_facecolor('black')
             ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
-            #if "Linear Fit" in filtered_data.columns:
-                #ax.plot(filtered_data.index, filtered_data["Linear Fit"], label="Linear Fit", color='yellow', linestyle=':')
-            #if "Exponential Fit" in filtered_data.columns:
-                #ax.plot(filtered_data.index, filtered_data["Exponential Fit"], label="Exponential Fit", color='white', linestyle=':')
             
             if 'dates_fine_linear' in locals() and time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
                 ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
@@ -279,7 +251,6 @@ for stock_name, stock_symbol in stocks.items():
                 # Filter the exponential fit to the date range of filtered_data
                 mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
                 ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='white', linestyle=':')
-                #ax.plot(dates_fine_exp, y_fine_exp, label="Exponential Fit", color='white', linestyle=':')
 
             # set the remaining plot
             ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
