@@ -98,7 +98,7 @@ def fit_stock_data(x_data, y_data, model_name, p0):
         params, _ = curve_fit(model, x_data, y_data, p0=p0, maxfev=2000)
         return params
     except RuntimeError as e:
-        print(f"An error occurred during fitting: {e}")
+        st.warning(f"An error occurred during fitting: {e}")
         return None
 
 # Fetch fitting parameters from Firebase Firestore
@@ -116,20 +116,41 @@ def get_fitting_params(symbol, model_type):
     return [], 0
 
 # Smooth bumpy lines by interpolating data
-def generate_smooth_fit_line(x_data, dates, params, model, num_points=1000):
+@st.cache_data
+def generate_smooth_fit_line(x_data, dates_tuple, params, model_name, num_points=1000):
+    """
+    Generate a smooth line for plotting a fitted model.
+
+    Parameters:
+    - x_data: The x-axis data (e.g., days since start).
+    - dates_tuple: A tuple of timestamps representing the dates (converted from DatetimeIndex).
+    - params: The fitted parameters.
+    - model_name: The name of the model ('linear' or 'exponential').
+    - num_points: The number of points for the smooth line.
+
+    Returns:
+    - dates_fine: The refined dates for the smooth line.
+    - y_fine: The fitted values for the smooth line.
+    """
+    # Map the model name to the corresponding function
+    if model_name == "linear":
+        model = linear_model
+    elif model_name == "exponential":
+        model = exponential_model
+    else:
+        raise ValueError(f"Unsupported model_name: {model_name}")
+
     # Generate finer x_data
     x_fine = np.linspace(x_data.min(), x_data.max(), num_points)
     # Compute the model values at x_fine
     y_fine = model(x_fine, *params)
     # Map x_fine to dates using interpolation
-    #dates_numeric = dates.astype(np.int64)
-    dates_numeric = dates.view('int64')  # Safe conversion to int64
+    dates_numeric = np.array(dates_tuple)  # Convert tuple back to numpy array
     x_to_date = interp1d(x_data, dates_numeric, kind='linear', bounds_error=False, fill_value='extrapolate')
     dates_fine = pd.to_datetime(x_to_date(x_fine))
     return dates_fine, y_fine
 
 #endregion
-
 
 #### Functions ####
 #region
@@ -157,22 +178,113 @@ def get_stock_data_from_firebase(symbol):
             return df
     return pd.DataFrame()
 
+def display_stocks_in_tab(stocks_list, tab):
+    with tab:
+        for _, stock_symbol in stocks_list:  # Unpack abs_diff and stock_symbol
+            info = stock_info_dict[stock_symbol]
+            stock_name = info["stock_name"]
+            stock_data = info["stock_data"]
+            dates_fine_exp = info["dates_fine_exp"]
+            y_fine_exp = info["y_fine_exp"]
+
+            # Create a container with a border
+            with st.container(border=True):
+                st.write(f"### {stock_name} ({stock_symbol}) Stock Price")
+
+                # User selection for time range
+                time_range = st.selectbox(
+                    f"Select Time Range for {stock_name}:",
+                    ["Full Range", "Last 5 Years", "Last 3 Years", "Last Year", "Last 6 Months", "Last Month", "Last Week"],
+                    key=f"{stock_symbol}_time_range"
+                )
+
+                # Filter data based on user selection
+                today = datetime.now()
+                if time_range == "Full Range":
+                    filtered_data = stock_data
+                elif time_range == "Last 5 Years":
+                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=5))]
+                elif time_range == "Last 3 Years":
+                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=3))]
+                elif time_range == "Last Year":
+                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=1))]
+                elif time_range == "Last 6 Months":
+                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=6))]
+                elif time_range == "Last Month":
+                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=1))]
+                elif time_range == "Last Week":
+                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(weeks=1))]
+
+                # Prepare data for linear fit
+                _removed_="""
+                dates_fine_linear, y_fine_linear = None, None
+                if time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
+                    x_data = np.arange(len(filtered_data))
+                    y_data = filtered_data["Close"].values
+
+                    linear_initial_params, _ = get_fitting_params(stock_symbol, "linear")
+                    if linear_initial_params:
+                        linear_params = fit_stock_data(x_data, y_data, "linear", linear_initial_params)
+                        if linear_params is not None:
+                            dates_tuple = tuple(filtered_data.index.view('int64'))
+                            dates_fine_linear, y_fine_linear = generate_smooth_fit_line(
+                                x_data, dates_tuple, linear_params, "linear", num_points=4
+                            )
+                """
+
+                # Plotting
+                fig, ax = plt.subplots()
+                fig.patch.set_facecolor('black')
+                ax.set_facecolor('black')
+                ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
+
+                # Removing the linear fitting plot as for now ##################
+                # Plot linear fit if available
+                #if dates_fine_linear is not None and time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
+                    #ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
+
+                # Filter the exponential fit to match the filtered data date range and plot
+                mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
+                ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='white', linestyle=':')
+
+                # Set the remaining plot
+                ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
+                ax.set_xlabel("Date", color='white')
+                ax.set_ylabel("Price (USD)", color='white')
+                ax.legend()
+                ax.grid(True, color='gray')
+                ax.set_ylim([filtered_data["Close"].min() * 0.95, filtered_data["Close"].max() * 1.05])
+                ax.tick_params(axis='x', colors='white', rotation=45)
+                ax.tick_params(axis='y', colors='white')
+                st.pyplot(fig)
+
+                # Display last data point information and normalized difference
+                st.write(f"""**Last data point:** {info['last_date']}  - **Close value:** {info['last_value']} - **Last fitted value:** {info['last_fitted_value']:.2f}  
+                **Normalized Difference:** {info['normalized_difference']:.2%}
+                """)
 #endregion
 
 #### Main app logic ####
 #region
-
 # Title of the webpage
 st.set_page_config(page_title="Stock Tracker")
-st.title("Stock Tracker & estimated fitting")
+st.title("Stock Tracker & Estimated Fitting")
 
-# Loop through all stocks
+# Initialize lists to categorize stocks
+buy_stocks = []
+wait_stocks = []
+sell_stocks = []
+
+# Dictionary to hold stock information
+stock_info_dict = {}
+
+# Main processing loop: Compute everything needed
 for stock_name, stock_symbol in stocks.items():
     # Fetch stock data from Firebase
     if stock_symbol not in st.session_state.stock_data:
         st.session_state.stock_data[stock_symbol] = get_stock_data_from_firebase(stock_symbol)
 
-    # Display stock data
+    # Get stock data
     stock_data = st.session_state.stock_data[stock_symbol]
 
     # Check if data is available before proceeding
@@ -180,104 +292,73 @@ for stock_name, stock_symbol in stocks.items():
         # Use Open price if Close price is not available
         stock_data['Close'] = stock_data['Close'].fillna(stock_data['Open'])
 
-        with st.container(border=True):
-            st.write(f"### {stock_name} ({stock_symbol}) Stock Price")
-            
-            # User selection for time range
-            time_range = st.selectbox(
-                f"Select Time Range for {stock_name}:",
-                ["Full Range", "Last 5 Years", "Last 3 Years", "Last Year", "Last 6 Months", "Last Month", "Last Week"],
-                key=f"{stock_symbol}_time_range"
-            )
-
-            # Filtering data based on user selection
-            today = datetime.now()
-            if time_range == "Full Range":
-                filtered_data = stock_data
-            elif time_range == "Last 5 Years":
-                filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=5))]
-            elif time_range == "Last 3 Years":
-                filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=3))]
-            elif time_range == "Last Year":
-                filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=1))]
-            elif time_range == "Last 6 Months":
-                filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=6))]
-            elif time_range == "Last Month":
-                filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=1))]
-            elif time_range == "Last Week":
-                filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(weeks=1))]
-
-            # Prepare data for fitting
-            x_data = np.arange(len(filtered_data))
-            y_data = filtered_data["Close"].values
-
-            # Linear fitting (applies to filtered data based on selected time range, excluding Full Range, Last 5 Years, Last 3 Years)
-            if time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
-                linear_initial_params, start_point_linear = get_fitting_params(stock_symbol, "linear")
-                if linear_initial_params:
-                    # Fit using the fit_stock_data function on the filtered data
-                    linear_params = fit_stock_data(x_data, y_data, "linear", linear_initial_params)
-
-                    # Generate smooth fit line for plotting
-                    dates_fine_linear, y_fine_linear = generate_smooth_fit_line(x_data, filtered_data.index, linear_params, linear_model, 4)
-
-            # Exponential fitting (applies to the entire dataset, from a given start point)
-            # Here we fetch the full dataset, rather than filtered_data, to make sure it spans all available data
+        # Exponential fitting (applies to the entire dataset, from a given start point)
+        exp_initial_params, start_point_exp = get_fitting_params(stock_symbol, "exponential")
+        if exp_initial_params:
             full_x_data = np.arange(len(stock_data))
             full_y_data = stock_data["Close"].values
 
-            exp_initial_params, start_point_exp = get_fitting_params(stock_symbol, "exponential")
-            if exp_initial_params:
-                
-                # Slice the full data starting from start_point_exp
-                x_data_exp = full_x_data[start_point_exp:]
-                y_data_exp = full_y_data[start_point_exp:]
-                
-                # Fit using the fit_stock_data function
-                exp_params = fit_stock_data(x_data_exp, y_data_exp, "exponential", exp_initial_params)
+            x_data_exp = full_x_data[start_point_exp:]
+            y_data_exp = full_y_data[start_point_exp:]
+            dates_tuple = tuple(stock_data.index[start_point_exp:].view('int64'))
+            exp_params = fit_stock_data(x_data_exp, y_data_exp, "exponential", exp_initial_params)
+            if exp_params is not None:
+                # Generate exponential fit for plotting
+                dates_fine_exp, y_fine_exp = generate_smooth_fit_line(
+                    x_data_exp, dates_tuple, exp_params, "exponential", num_points=1000
+                )
 
-                # Generate smooth fit line for plotting
-                dates_fine_exp, y_fine_exp = generate_smooth_fit_line(x_data_exp, stock_data.index[start_point_exp:], exp_params, exponential_model, 1000)
+                # Get the last data point
+                last_data_point = stock_data.iloc[-1]
+                last_date = last_data_point.name
+                last_value = last_data_point["Close"]
 
-            # Plotting the filtered data inside a container with a border and adjusting Y-axis limits
-            fig, ax = plt.subplots()
-            fig.patch.set_facecolor('black')
-            ax.set_facecolor('black')
-            ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
-            
-            if 'dates_fine_linear' in locals() and time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
-                ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
-            if 'dates_fine_exp' in locals():
-                # Filter the exponential fit to the date range of filtered_data
-                mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
-                ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='white', linestyle=':')
+                # Get the last fitted value (corresponds to the highest x value in the fit)
+                last_fitted_value = y_fine_exp[-1]
 
-            # set the remaining plot
-            ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
-            ax.set_xlabel("Date", color='white')
-            ax.set_ylabel("Price (USD)", color='white')
-            ax.legend()
-            ax.grid(True, color='gray')
-            ax.set_ylim([filtered_data["Close"].min() * 0.95, filtered_data["Close"].max() * 1.05])  # Adjust Y-axis limits to zoom properly
-            ax.tick_params(axis='x', colors='white', rotation=45)
-            ax.tick_params(axis='y', colors='white')
-            st.pyplot(fig)
+                # Compute the normalized difference
+                normalized_difference = (last_value - last_fitted_value) / last_value
 
-            # Display last data point information
-            last_data_point = filtered_data.iloc[-1]
-            last_date = last_data_point.name.strftime("%Y-%m-%d")
-            last_value = last_data_point["Close"]
-            value_type = "Close value" if "Close" in filtered_data.columns and not pd.isna(last_data_point["Close"]) else "Open value"
-            st.write(f"**Last data point:** {last_date} - {value_type}: {last_value}")
+                # Store all relevant information for later use
+                stock_info_dict[stock_symbol] = {
+                    "stock_name": stock_name,
+                    "stock_data": stock_data,
+                    "exp_params": exp_params,
+                    "start_point_exp": start_point_exp,
+                    "dates_fine_exp": pd.to_datetime(dates_fine_exp),
+                    "y_fine_exp": y_fine_exp,
+                    "last_date": last_date.strftime("%Y-%m-%d"),
+                    "last_value": last_value,
+                    "last_fitted_value": last_fitted_value,
+                    "normalized_difference": normalized_difference,
+                }
+            else:
+                st.warning(f"Could not fit exponential model for {stock_name}.")
+        else:
+            st.warning(f"No exponential fitting parameters found for {stock_name}.")
     else:
         st.error(f"No stock data available for {stock_name}.")
 
-#endregion
+# Categorize stocks based on normalized differences
+for stock_symbol, info in stock_info_dict.items():
+    normalized_difference = info["normalized_difference"]
+    abs_diff = abs(normalized_difference)
+    if abs_diff < 0.03:
+        wait_stocks.append((abs_diff, stock_symbol))
+    elif normalized_difference < 0:  # Price below fit => Buy
+        buy_stocks.append((abs_diff, stock_symbol))
+    else:  # Price above fit => Sell
+        sell_stocks.append((abs_diff, stock_symbol))
 
-st.write("""
-This is not financial advice, just a representation of the time evolution of the price of the stock of some AI-related companies.
+# Sort stocks in each category by absolute normalized difference in descending order
+buy_stocks.sort(reverse=True, key=lambda x: x[0])  # Sort by abs_diff
+wait_stocks.sort(reverse=True, key=lambda x: x[0])
+sell_stocks.sort(reverse=True, key=lambda x: x[0])
 
-The fitting function is chosen based on the assumption, probably wrong, that most AI-related companies are going to thrive in the upcoming years.
+# Create tabs
+tab1, tab2, tab3 = st.tabs(["Buy", "Wait", "Sell"])
 
-As a matter of fact, the graphs are not real-time updated; they update once every day, at market close.
-""")
+# Display stocks in each tab
+display_stocks_in_tab(buy_stocks, tab1)
+display_stocks_in_tab(wait_stocks, tab2)
+display_stocks_in_tab(sell_stocks, tab3)
