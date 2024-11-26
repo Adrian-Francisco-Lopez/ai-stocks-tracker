@@ -1,0 +1,27 @@
+name: Clear Streamlit Cache
+
+on:
+  schedule:
+    - cron: '30 14 * * 1-5'  # Every weekday at 9:30 AM EST (NASDAQ opening time)
+  workflow_dispatch:  # Allow manual triggering of the workflow
+jobs:
+  clear_cache:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.8
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run cache clearing script
+      run: |
+        python clear_cache.py
