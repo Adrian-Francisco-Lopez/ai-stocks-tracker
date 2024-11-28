@@ -156,7 +156,7 @@ def generate_smooth_fit_line(x_data, dates_tuple, params, model_name, num_points
 #region
 
 # Fetch stock data from Firebase Firestore
-@st.cache_data
+@st.cache_data(ttl=3600) # gets cleared in 1 hours = 3600 seconds
 def get_stock_data_from_firebase(symbol):
     """
     This function fetches stock data from Firebase Firestore as a JSON document.
