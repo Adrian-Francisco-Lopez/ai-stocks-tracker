@@ -343,7 +343,7 @@ for stock_name, stock_symbol in stocks.items():
 for stock_symbol, info in stock_info_dict.items():
     normalized_difference = info["normalized_difference"]
     abs_diff = abs(normalized_difference)
-    if abs_diff < 0.03:
+    if abs_diff < 0.04:
         wait_stocks.append((abs_diff, stock_symbol))
     elif normalized_difference < 0:  # Price below fit => Buy
         buy_stocks.append((abs_diff, stock_symbol))
