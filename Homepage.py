@@ -189,79 +189,85 @@ def display_stocks_in_tab(stocks_list, tab):
 
             # Create a container with a border
             with st.container(border=True):
-                st.write(f"### {stock_name} ({stock_symbol}) Stock Price")
+                st.write(f"### {stock_name} ({stock_symbol}) Stock Price - Full Range")
 
-                # User selection for time range
-                time_range = st.selectbox(
-                    f"Select Time Range for {stock_name}:",
-                    ["Full Range", "Last 5 Years", "Last 3 Years", "Last Year", "Last 6 Months", "Last Month", "Last Week"],
-                    key=f"{stock_symbol}_time_range"
-                )
+                fig_full, ax_full = plt.subplots()
+                fig_full.patch.set_facecolor('black')
+                ax_full.set_facecolor('black')
+                ax_full.plot(stock_data.index, stock_data["Close"], label="Close Price")
 
-                # Filter data based on user selection
-                today = datetime.now()
-                if time_range == "Full Range":
-                    filtered_data = stock_data
-                elif time_range == "Last 5 Years":
-                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=5))]
-                elif time_range == "Last 3 Years":
-                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=3))]
-                elif time_range == "Last Year":
-                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=1))]
-                elif time_range == "Last 6 Months":
-                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=6))]
-                elif time_range == "Last Month":
-                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=1))]
-                elif time_range == "Last Week":
-                    filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(weeks=1))]
+                # Add the exponential fit to the full-range plot
+                mask_full = (dates_fine_exp >= stock_data.index.min()) & (dates_fine_exp <= stock_data.index.max())
+                ax_full.plot(dates_fine_exp[mask_full], y_fine_exp[mask_full], label="Exponential Fit", color='white', linestyle=':')
 
-                # Prepare data for linear fit
-                _removed_="""
-                dates_fine_linear, y_fine_linear = None, None
-                if time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
-                    x_data = np.arange(len(filtered_data))
-                    y_data = filtered_data["Close"].values
-
-                    linear_initial_params, _ = get_fitting_params(stock_symbol, "linear")
-                    if linear_initial_params:
-                        linear_params = fit_stock_data(x_data, y_data, "linear", linear_initial_params)
-                        if linear_params is not None:
-                            dates_tuple = tuple(filtered_data.index.view('int64'))
-                            dates_fine_linear, y_fine_linear = generate_smooth_fit_line(
-                                x_data, dates_tuple, linear_params, "linear", num_points=4
-                            )
-                """
-
-                # Plotting
-                fig, ax = plt.subplots()
-                fig.patch.set_facecolor('black')
-                ax.set_facecolor('black')
-                ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
-
-                # Removing the linear fitting plot as for now ##################
-                # Plot linear fit if available
-                #if dates_fine_linear is not None and time_range in ["Last Year", "Last 6 Months", "Last Month", "Last Week"]:
-                    #ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
-
-                # Filter the exponential fit to match the filtered data date range and plot
-                mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
-                ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='white', linestyle=':')
-
-                # Set the remaining plot
-                ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
-                ax.set_xlabel("Date", color='white')
-                ax.set_ylabel("Price (USD)", color='white')
-                ax.legend()
-                ax.grid(True, color='gray')
-                ax.set_ylim([filtered_data["Close"].min() * 0.95, filtered_data["Close"].max() * 1.05])
-                ax.tick_params(axis='x', colors='white', rotation=45)
-                ax.tick_params(axis='y', colors='white')
-                st.pyplot(fig)
+                # Set full-range plot details
+                ax_full.set_title(f"{stock_name} ({stock_symbol}) Stock Price (Full Range)", color='white')
+                ax_full.set_xlabel("Date", color='white')
+                ax_full.set_ylabel("Price (USD)", color='white')
+                ax_full.legend()
+                ax_full.grid(True, color='gray')
+                ax_full.set_ylim([stock_data["Close"].min() * 0.95, stock_data["Close"].max() * 1.05])
+                ax_full.tick_params(axis='x', colors='white', rotation=45)
+                ax_full.tick_params(axis='y', colors='white')
+                st.pyplot(fig_full)
+                plt.close(fig_full)  # Close the figure to release memory
 
                 # Display last data point information and normalized difference
                 st.write(f"""**Last data point:** {info['last_date']}  - **Close value:** {info['last_value']} - **Last fitted value:** {info['last_fitted_value']:.2f}  
                 **Normalized Difference:** {info['normalized_difference']:.2%}
                 """)
+
+                with st.expander("See Detailed View", expanded=False):
+
+                    # User selection for time range
+                    time_range = st.selectbox(
+                        f"Select Time Range for {stock_name}:",
+                        ["Last 5 Years", "Last 3 Years", "Last Year", "Last 6 Months", "Last 3 Monts", "Last Month", "Last Week"],
+                        key=f"{stock_symbol}_time_range",
+                        index=3
+                    )
+
+                    # Filter data based on user selection
+                    today = datetime.now()
+                    if time_range == "Full Range":
+                        filtered_data = stock_data
+                    elif time_range == "Last 5 Years":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=5))]
+                    elif time_range == "Last 3 Years":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=3))]
+                    elif time_range == "Last Year":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(years=1))]
+                    elif time_range == "Last 6 Months":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=6))]
+                    elif time_range == "Last 3 Months":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=3))]
+                    elif time_range == "Last Month":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(months=1))]
+                    elif time_range == "Last Week":
+                        filtered_data = stock_data[stock_data.index >= (today - pd.DateOffset(weeks=1))]
+
+                    # Plotting
+                    fig, ax = plt.subplots()
+                    fig.patch.set_facecolor('black')
+                    ax.set_facecolor('black')
+                    ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
+
+                    # Filter the exponential fit to match the filtered data date range and plot
+                    mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
+                    ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='white', linestyle=':')
+
+                    # Set the remaining plot
+                    ax.set_title(f"{stock_name} ({stock_symbol}) Stock Price", color='white')
+                    ax.set_xlabel("Date", color='white')
+                    ax.set_ylabel("Price (USD)", color='white')
+                    ax.legend()
+                    ax.grid(True, color='gray')
+                    ax.set_ylim([filtered_data["Close"].min() * 0.95, filtered_data["Close"].max() * 1.05])
+                    ax.tick_params(axis='x', colors='white', rotation=45)
+                    ax.tick_params(axis='y', colors='white')
+                    st.pyplot(fig)
+                    plt.close(fig)  # Close the figure to release memory
+
 #endregion
 
 #### Main app logic ####
