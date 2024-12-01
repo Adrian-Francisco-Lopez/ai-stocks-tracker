@@ -169,3 +169,4 @@ secrets.toml
 /stock_data_files
 pull_stock_datasets.py
 update_stock_data.py
+.DS_Store

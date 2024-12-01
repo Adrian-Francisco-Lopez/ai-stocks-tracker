@@ -46,15 +46,15 @@ stocks = {
     "Astera Labs Inc": "ALAB",
     "Arm": "ARM",
     "Alphabet 1": "GOOGL",
-    "Alphabet 2": "GOOG",
     "Broadcom Inc.": "AVGO",
-    "Amazon": "AMZN",
     "NXP Semiconductors": "NXPI",
     "Microsoft": "MSFT",
-    "Meta Platforms": "META",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
-    "CrowdStrike": "CRWD"
+    "Palo Alto Networks": "PANW",
+    "Gartner": "IT",
+    "Oracle": "ORCL",
+    "Service now": "NOW"
 }
 
 #endregion

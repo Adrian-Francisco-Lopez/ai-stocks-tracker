@@ -6,10 +6,10 @@ from firebase_admin import credentials, firestore
 import json
 import time
 from datetime import datetime
-#from dotenv import load_dotenv  # To run locally
+from dotenv import load_dotenv  # To run locally
 
 # Load environment variables from .env file
-#load_dotenv()  # To run locally
+load_dotenv()  # To run locally
 
 # Debug
 print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
@@ -84,15 +84,15 @@ stocks = {
     "Astera Labs Inc": "ALAB",
     "Arm": "ARM",
     "Alphabet 1": "GOOGL",
-    "Alphabet 2": "GOOG",
     "Broadcom Inc.": "AVGO",
-    "Amazon": "AMZN",
     "NXP Semiconductors": "NXPI",
     "Microsoft": "MSFT",
-    "Meta Platforms": "META",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
-    "CrowdStrike": "CRWD"
+    "Palo Alto Networks": "PANW",
+    "Gartner": "IT",
+    "Oracle": "ORCL",
+    "Service now": "NOW"
 }
 
 # Update each stock's data
