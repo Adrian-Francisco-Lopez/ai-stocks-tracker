@@ -48,13 +48,18 @@ stocks = {
     "Alphabet 1": "GOOGL",
     "Broadcom Inc.": "AVGO",
     "NXP Semiconductors": "NXPI",
-    "Microsoft": "MSFT",
     "Palantir Technologies": "PLTR",
     "Marvell Technology Inc": "MRVL",
     "Palo Alto Networks": "PANW",
     "Gartner": "IT",
     "Oracle": "ORCL",
-    "Service now": "NOW"
+    "Service now": "NOW",
+    "Applied Materials": "AMAT",
+    "Arista": "ANET",
+    "Cadence Design Systems": "CDNS",
+    "Progress Software": "PRGS",
+    "Synopsys": "SNPS",
+    "Trade Desk": "TTD"
 }
 
 #endregion
