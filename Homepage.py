@@ -59,7 +59,7 @@ stocks = {
     "Cadence Design Systems": "CDNS",
     "Progress Software": "PRGS",
     "Synopsys": "SNPS",
-    "Trade Desk": "TTD"
+    "AMAZON": "AMZN"
 }
 
 #endregion
