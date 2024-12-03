@@ -218,7 +218,7 @@ def display_stocks_in_tab(stocks_list, tab):
                 plt.close(fig_full)  # Close the figure to release memory
 
                 # Display last data point information and normalized difference
-                st.write(f"""**Last data point:** {info['last_date']}  - **Close value:** {info['last_value']} - **Last fitted value:** {info['last_fitted_value']:.2f}  
+                st.write(f"""**Last data point:** {info['last_date']}  - **Last Close or Open:** {info['last_value']} - **Last fitted value:** {info['last_fitted_value']:.2f}  
                 **Normalized Difference:** {info['normalized_difference']:.2%}
                 """)
 

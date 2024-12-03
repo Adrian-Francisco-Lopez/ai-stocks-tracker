@@ -6,10 +6,10 @@ from firebase_admin import credentials, firestore
 import json
 import time
 from datetime import datetime
-from dotenv import load_dotenv  # To run locally
+#from dotenv import load_dotenv  # To run locally
 
 # Load environment variables from .env file
-load_dotenv()  # To run locally
+#load_dotenv()  # To run locally
 
 # Debug
 print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
