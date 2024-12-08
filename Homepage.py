@@ -265,7 +265,7 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         st.write(f"Exponential Fit - Filtered Y Length: {len(filtered_y_fine_exp)}")
 
         if len(filtered_dates_exp) == len(filtered_y_fine_exp):
-            ax.plot(filtered_dates_exp, filtered_y_fine_exp, label="Exponential Fit", color='gray', alpha=0.75, linestyle=':')
+            ax.plot(filtered_dates_exp, filtered_y_fine_exp, label="Exponential Fit", color='white', alpha=0.75, linestyle=':')
         else:
             st.warning(f"Length mismatch in exponential fit data for {stock_symbol}. Skipping Exponential Fit.")
     else:
@@ -287,11 +287,25 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         linear_params = fit_stock_data(x_data, y_data, "linear", [slope_guess, baseline_guess])
 
         if linear_params is not None:
+            # Define two points for the straight line: first and last
+            x_start, x_end = x_data[0], x_data[-1]
+            y_start, y_end = linear_model(x_start, *linear_params), linear_model(x_end, *linear_params)
+
+            # Plot the straight line
+            ax.plot(
+                [filtered_data.index[0], filtered_data.index[-1]],
+                [y_start, y_end],
+                label="Linear Fit",
+                color='yellow',
+                linestyle=':'
+            )
+        
+        if linear_params is not None:
             dates_tuple = tuple(filtered_data.index.view('int64'))
             dates_fine_linear, y_fine_linear = generate_smooth_fit_line(
                 x_data, dates_tuple, linear_params, "linear"
             )
-            ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
+            #ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
 
             # Calculate residuals
             y_predicted = linear_model(x_data, *linear_params)
@@ -313,12 +327,13 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
                 P_high = 50.0
                 P_low = 50.0
 
-            # Fill between using residual-based std_dev
+            # Fill between using residual-based std_dev with two points
             ax.fill_between(
-                dates_fine_linear,
-                y_fine_linear - std_dev_residual,
-                y_fine_linear + std_dev_residual,
-                color='gray', alpha=0.45
+                [filtered_data.index[0], filtered_data.index[-1]],
+                [y_start - std_dev_residual, y_end - std_dev_residual],
+                [y_start + std_dev_residual, y_end + std_dev_residual],
+                color='gray',
+                alpha=0.45
             )
         else:
             st.warning(f"Could not fit linear model for {time_offset_name} in {stock_name}.")
@@ -445,7 +460,7 @@ def plot_prediction_chart(stock_data, stock_symbol, stock_name):
 
             # Smoothed close price
             y_smooth = smooth_data(y_data, window_fraction=0.1)
-            ax.plot(filtered_data.index, y_smooth, label="Smoothed Close", color='blue', alpha=0.5)
+            ax.plot(filtered_data.index, y_smooth, label="Smoothed Close", color='blue', alpha=0.75)
 
             # Compute linear fit parameters for this time range
             if len(y_data) > 1:
@@ -879,7 +894,7 @@ with tabs[7]:  # Overall tab
                             ax.set_ylabel("Price (USD)", color='white')
                             ax.tick_params(axis='x', colors='white')
                             ax.tick_params(axis='y', colors='white')
-                            ax.grid(color='gray', alpha=0.5)
+                            ax.grid(color='gray')
                             ax.legend()
                             st.pyplot(fig)
                             plt.close(fig)
