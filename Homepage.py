@@ -151,10 +151,6 @@ def classify_stocks_exponential(stock_info_dict):
     return buy_stocks, wait_stocks, sell_stocks
 
 def classify_stocks_linear(stock_info_dict, time_offset):
-    """
-    Classify stocks based on linear fit difference for a given time_offset.
-    time_offset: a pd.DateOffset defining the timeframe (e.g. pd.DateOffset(years=1))
-    """
     buy_stocks = []
     wait_stocks = []
     sell_stocks = []
@@ -206,8 +202,7 @@ def plot_full_range_stock(info):
     y_fine_exp = info["y_fine_exp"]
     stock_symbol = info["stock_symbol"]
 
-    # Write the stock name
-    st.subheader(f"{stock_name} ({stock_symbol}) Stock Price - Full Range")
+    st.write(f"### {stock_name} ({stock_symbol}) Stock Price - Full Range")
 
     fig_full, ax_full = plt.subplots()
     fig_full.patch.set_facecolor('black')
@@ -217,7 +212,6 @@ def plot_full_range_stock(info):
     mask_full = (dates_fine_exp >= stock_data.index.min()) & (dates_fine_exp <= stock_data.index.max())
     ax_full.plot(dates_fine_exp[mask_full], y_fine_exp[mask_full], label="Exponential Fit", color='white', linestyle=':')
 
-    ax_full.set_title(f"{stock_symbol} (Full Range)", color='white')
     ax_full.set_xlabel("Date", color='white')
     ax_full.set_ylabel("Price (USD)", color='white')
     ax_full.legend()
@@ -228,23 +222,20 @@ def plot_full_range_stock(info):
     st.pyplot(fig_full)
     plt.close(fig_full)
 
-    # Display last data point info
+    # Display last data point info (rounded)
     st.write(f"**Last data point:** {info['last_date']}  - **Close (Open) Value:** {info['last_value']:.2f}")
     st.write(f"**Last fitted value:** {info['last_fitted_value']:.2f}")
     st.write(f"**Normalized Difference:** {info['normalized_difference']:.2%}")
 
 def plot_short_range_stock(info, time_offset_name, time_offset):
-    # Similar to previously done in dropdown, but now directly shown
     stock_name = info["stock_name"]
     stock_data = info["stock_data"]
     dates_fine_exp = info["dates_fine_exp"]
     y_fine_exp = info["y_fine_exp"]
     stock_symbol = info["stock_symbol"]
 
-    # Write the stock name
-    st.subheader(f"{stock_name} ({stock_symbol}) - Full Range")
+    st.write(f"### {stock_name} ({stock_symbol}) Stock Price - {time_offset_name}")
 
-    # Filter data
     today = datetime.now()
     filtered_data = stock_data[stock_data.index >= (today - time_offset)]
 
@@ -256,11 +247,11 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
     ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
 
     # Exponential Fit in gray (~60%-75% alpha)
-    mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
-    ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='gray', alpha=0.75, linestyle=':')
-
-    # Always show High/Low
     if not filtered_data.empty:
+        mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
+        ax.plot(dates_fine_exp[mask], y_fine_exp[mask], label="Exponential Fit", color='gray', alpha=0.75, linestyle=':')
+
+        # High/Low
         ax.plot(filtered_data.index, filtered_data["High"], label="High", color='green', linewidth=1)
         ax.plot(filtered_data.index, filtered_data["Low"], label="Low", color='red', linewidth=1)
 
@@ -279,7 +270,6 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
             )
             ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
 
-            # Std dev band
             std_dev = filtered_data["Close"].std()
             half_std = std_dev / 2
             ax.fill_between(
@@ -289,7 +279,6 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
                 color='gray', alpha=0.45
             )
 
-    ax.set_title(f"{stock_symbol} Stock Price ({time_offset_name})", color='white')
     ax.set_xlabel("Date", color='white')
     ax.set_ylabel("Price (USD)", color='white')
     ax.grid(True, color='gray')
@@ -297,11 +286,9 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         ax.set_ylim([filtered_data["Close"].min() * 0.95, filtered_data["Close"].max() * 1.05])
     ax.tick_params(axis='x', colors='white', rotation=45)
     ax.tick_params(axis='y', colors='white')
-    # No legend as per instructions
     st.pyplot(fig)
     plt.close(fig)
 
-    # Display Last Closing Price, Estimated High, Estimated Low, with probabilities
     if not filtered_data.empty and linear_params is not None:
         last_close = filtered_data["Close"].iloc[-1]
         avg_diff_high = (filtered_data["High"] - filtered_data["Close"]).mean()
@@ -309,7 +296,6 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         estimated_high = last_close + avg_diff_high
         estimated_low = last_close - avg_diff_low
 
-        # Probability calculations
         dates_tuple = tuple(filtered_data.index.view('int64'))
         x_data = np.arange(len(filtered_data))
         y_data = filtered_data["Close"].values
@@ -332,15 +318,282 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         st.markdown(f"**Estimated Next High Value:** <span style='color:green;'> {estimated_high:.2f}</span> ({P_high:.2f}% probability)", unsafe_allow_html=True)
         st.markdown(f"**Estimated Low Value:** <span style='color:red;'>{estimated_low:.2f}</span> ({P_low:.2f}% probability)", unsafe_allow_html=True)
 
+
+#### New Functions for Predictions ####
+@st.cache_data(ttl=86400)
+def smooth_data(y, window_fraction=0.05):
+    # A simple way to "smooth" data is a rolling mean.
+    # window_fraction of 0.05 means 5% of length as window size
+    length = len(y)
+    window = max(3, int(length * window_fraction))
+    y_smooth = pd.Series(y).rolling(window=window, center=True, min_periods=1).mean().values
+    return y_smooth
+
+def sinusoidal_model_fixed_linear(x, A1, f1, phi1, A2, f2, phi2, m, n):
+    """
+    Sinusoidal model with fixed linear baseline and two sinusoidal components.
+    x: Input data
+    A1, f1, phi1: Amplitude, frequency, and phase of the first sinusoid
+    A2, f2, phi2: Amplitude, frequency, and phase of the second sinusoid
+    m, n: Fixed linear parameters
+    """
+    y = m * x + n  # Linear component
+    y += A1 * np.sin(f1 * x + phi1)  # First sinusoid
+    y += A2 * np.sin(f2 * x + phi2)  # Second sinusoid
+    return y
+
+@st.cache_data(ttl=86400)
+def fit_two_sinusoids_fixed_linear(x_data, y_data, std_dev, linear_params):
+    """
+    Fit the data using a model with fixed linear parameters and two sinusoidal components.
+    Parameters:
+    - x_data: Independent variable (time or index)
+    - y_data: Dependent variable (close price)
+    - std_dev: Standard deviation of the data (used for initial amplitude guesses)
+    - linear_params: Tuple of fixed linear parameters (m, n)
+
+    Returns:
+    - Fitted parameters for the sinusoidal components, or None if the fit fails.
+    """
+    m, n = linear_params  # Fixed linear parameters
+
+    # Initial guesses for sinusoidal parameters
+    A1_guess = 2 * std_dev  # Amplitude of the first sinusoid
+    f1_guess = 2 * np.pi / len(x_data)  # Frequency of the first sinusoid
+    phi1_guess = np.pi / 2  # Phase of the first sinusoid
+
+    A2_guess = std_dev  # Amplitude of the second sinusoid
+    f2_guess = 4 * np.pi / len(x_data)  # Frequency of the second sinusoid
+    phi2_guess = 0  # Phase of the second sinusoid
+
+    p0 = [A1_guess, f1_guess, phi1_guess, A2_guess, f2_guess, phi2_guess]  # Initial guesses
+
+    try:
+        # Fit the model, keeping m and n fixed
+        popt, _ = curve_fit(
+            lambda x, A1, f1, phi1, A2, f2, phi2: sinusoidal_model_fixed_linear(x, A1, f1, phi1, A2, f2, phi2, m, n),
+            x_data,
+            y_data,
+            p0=p0,
+            bounds=(
+                [0, 0, -np.pi, 0, 0, -np.pi],  # Lower bounds
+                [np.inf, np.inf, np.pi, np.inf, np.inf, np.pi],  # Upper bounds
+            ),
+            maxfev=5000
+        )
+        return popt  # Return optimized sinusoidal parameters
+    except RuntimeError:
+        return None  # Return None if the fitting fails
+
+def plot_prediction_chart(stock_data, stock_symbol, stock_name):
+    time_ranges = {
+        "1 Year": pd.DateOffset(years=1),
+        "6 Months": pd.DateOffset(months=6),
+        "3 Months": pd.DateOffset(months=3),
+        "1 Month": pd.DateOffset(months=1),
+        "2 Weeks": pd.DateOffset(weeks=2),
+    }
+
+    with st.expander("Stock evolution prediction"):
+        for label, offset in time_ranges.items():
+            today = datetime.now()
+            filtered_data = stock_data[stock_data.index >= (today - offset)]
+            if filtered_data.empty:
+                st.write(f"No data for {label}")
+                continue
+
+            x_data = np.arange(len(filtered_data))
+            y_data = filtered_data["Close"].values
+            std_dev = filtered_data["Close"].std()
+
+            fig, ax = plt.subplots()
+            fig.patch.set_facecolor('black')
+            ax.set_facecolor('black')
+
+            # Original close price
+            ax.plot(filtered_data.index, y_data, label="Close Price")
+
+            # Smoothed close price
+            y_smooth = smooth_data(y_data, window_fraction=0.1)
+            ax.plot(filtered_data.index, y_smooth, label="Smoothed Close", color='blue', alpha=0.5)
+
+            # Compute linear fit parameters for this time range
+            if len(y_data) > 1:
+                slope_guess = (y_data[-1] - y_data[0]) / (x_data[-1] - x_data[0])
+            else:
+                slope_guess = 0.0
+            baseline_guess = y_data[0]
+            linear_params = fit_stock_data(x_data, y_data, "linear", [slope_guess, baseline_guess])
+            if linear_params is None:
+                st.write("Could not fit linear model for this timeframe")
+                plt.close(fig)
+                continue
+
+            # Fit two sinusoids with fixed linear parameters
+            sinusoidal_params = fit_two_sinusoids_fixed_linear(x_data, y_data, std_dev, linear_params)
+            if sinusoidal_params is not None:
+                # Extend prediction
+                future_len = int(len(x_data) * 1.5)
+                x_future = np.arange(future_len)
+                y_fit = sinusoidal_model_fixed_linear(x_future, *sinusoidal_params, *linear_params)
+
+                ax.plot(filtered_data.index, y_fit[:len(x_data)], label="Sinusoidal Fit", color='yellow')
+                future_dates = pd.date_range(filtered_data.index[-1], periods=future_len-len(x_data)+1, freq='D')[1:]
+                ax.plot(future_dates, y_fit[len(x_data):], linestyle='--', color='yellow', alpha=0.7, label="Prediction")
+            else:
+                st.write("Fit did not converge, could not predict")
+
+            ax.set_title(f"{stock_symbol} Stock {label} Prediction", color='white')
+            ax.set_xlabel("Date", color='white')
+            ax.set_ylabel("Price (USD)", color='white')
+            ax.grid(True, color='gray')
+            ax.tick_params(axis='x', colors='white', rotation=45)
+            ax.tick_params(axis='y', colors='white')
+
+            st.pyplot(fig)
+            plt.close(fig)
+
+@st.cache_data(ttl=86400)
+def calculate_weighted_prediction(predictions, weights):
+    """
+    Calculate the weighted average of predicted data.
+    Args:
+        predictions (dict): Keys are time ranges (e.g., "1 Year") and values are predicted arrays.
+        weights (dict): Keys are time ranges and values are weights.
+
+    Returns:
+        np.array: Weighted averaged predictions for the future.
+    """
+    total_weight = sum(weights.values())
+    weighted_sum = np.zeros_like(predictions[next(iter(predictions))])  # Initialize to the shape of a prediction
+
+    for time_range, prediction in predictions.items():
+        weight = weights[time_range]
+        weighted_sum += weight * prediction
+
+    # Normalize to the total weight
+    weighted_average = weighted_sum / total_weight
+    return weighted_average
+
+def prepare_predictions_for_stock(info, time_ranges):
+    """
+    Prepare weighted predictions for a stock for different horizons.
+    Args:
+        info (dict): Stock info containing predicted sinusoidal and exponential fits.
+        time_ranges (list): Time range keys to include (e.g., ["2 Weeks", "3 Months", "1 Year"]).
+
+    Returns:
+        dict: Predicted weighted averages for each horizon.
+    """
+    predictions = {}
+
+    # Extract predictions for all intervals
+    for time_range in time_ranges:
+        key = f"predicted_{time_range.replace(' ', '_').lower()}"
+        if key in info["predicted_fits"]:
+            predictions[time_range] = info["predicted_fits"][key]
+        else:
+            st.warning(f"Missing {key}. Filling with NaN.")
+            predictions[time_range] = np.full(future_horizons[time_range], np.nan)
+
+    # Add exponential fit
+    exp_fit_future = info.get("exp_fit_future", np.full(future_horizons["1 Year"], np.nan))
+    exp_adjustment = info.get("last_value", 0) - info.get("last_fitted_value", 0)
+    exp_fit_future_adjusted = exp_fit_future + exp_adjustment
+    predictions["Exponential"] = exp_fit_future_adjusted
+
+    # Calculate weighted predictions for each final horizon
+    final_predictions = {}
+
+    # 2 Weeks final horizon
+    weighted_2w = calculate_weighted_prediction(predictions, horizon_weights_2_weeks)
+    final_predictions["2 Weeks"] = weighted_2w[:future_horizons["2 Weeks"]]
+
+    # 3 Months final horizon
+    weighted_3m = calculate_weighted_prediction(predictions, horizon_weights_3_months)
+    final_predictions["3 Months"] = weighted_3m[:future_horizons["3 Months"]]
+
+    # 1 Year final horizon
+    weighted_1y = calculate_weighted_prediction(predictions, horizon_weights_1_year)
+    final_predictions["1 Year"] = weighted_1y[:future_horizons["1 Year"]]
+
+    return final_predictions
+
+#### Test Function ###
+def test_prepare_predictions(stock_info_dict, time_ranges):
+    """
+    Test the prepare_predictions_for_stock function for all stocks.
+    Args:
+        stock_info_dict (dict): Dictionary containing stock info.
+        time_ranges (list): Time ranges to use in predictions.
+
+    Returns:
+        None: Outputs results for verification.
+    """
+    for stock_symbol, info in stock_info_dict.items():
+        try:
+            final_predictions = prepare_predictions_for_stock(info, time_ranges)
+            st.write(f"Predictions for {stock_symbol}:")
+            st.json(final_predictions)
+        except KeyError as e:
+            st.error(f"KeyError for {stock_symbol}: {e}")
+        except Exception as e:
+            st.error(f"Unexpected error for {stock_symbol}: {e}")
+### end Test Fucntion ####
+
 #endregion
 
 #### Main app logic ####
 #region
 st.set_page_config(page_title="Stock Tracker")
-st.title("Stock Tracker & Estimated Fitting")
+st.title("AI Stock Tracker & Estimated Fitting")
 
 # Fetch all stock data and info
 stock_info_dict = {}
+
+# Time ranges for initial predictions
+time_ranges = {
+    "1 Year": pd.DateOffset(years=1),
+    "6 Months": pd.DateOffset(months=6),
+    "3 Months": pd.DateOffset(months=3),
+    "1 Month": pd.DateOffset(months=1),
+    "2 Weeks": pd.DateOffset(weeks=2),
+}
+
+# Future horizons for final predictions
+future_horizons = {
+    "1 Year": 365,     # Extend by 365 days
+    "6 Months": 182,   # Extend by approximately 6 months
+    "3 Months": 91,    # Extend by approximately 3 months
+    "1 Month": 30,     # Extend by 1 month
+    "2 Weeks": 14,     # Extend by 2 weeks
+}
+
+# Define separate weight dictionaries for each horizon
+horizon_weights_2_weeks = {
+    "1 Year": 1,
+    "6 Months": 2,
+    "3 Months": 4,
+    "1 Month": 8,
+    "2 Weeks": 16,
+}
+
+horizon_weights_3_months = {
+    "1 Year": 2,
+    "6 Months": 4,
+    "3 Months": 8,
+    "1 Month": 16,
+    "2 Weeks": 8,
+}
+
+horizon_weights_1_year = {
+    "1 Year": 16,
+    "6 Months": 8,
+    "3 Months": 4,
+    "1 Month": 2,
+    "2 Weeks": 1,
+}
+
 for stock_name, stock_symbol in stocks.items():
     if stock_symbol not in st.session_state.stock_data:
         st.session_state.stock_data[stock_symbol] = get_stock_data_from_firebase(stock_symbol)
@@ -352,6 +605,8 @@ for stock_name, stock_symbol in stocks.items():
 
         exp_initial_params, start_point_exp = get_fitting_params(stock_symbol, "exponential")
         if exp_initial_params:
+
+            # Generate exponential fit
             full_x_data = np.arange(len(stock_data))
             full_y_data = stock_data["Close"].values
 
@@ -364,26 +619,88 @@ for stock_name, stock_symbol in stocks.items():
                     x_data_exp, dates_tuple, exp_params, "exponential", num_points=1000
                 )
 
-                # Last data point details
+                # Prepare data for predictions
                 last_data_point = stock_data.iloc[-1]
                 last_date = last_data_point.name
                 last_value = last_data_point["Close"]
                 last_fitted_value = y_fine_exp[-1]
                 normalized_difference = (last_value - last_fitted_value) / last_value
 
+                # Prepare exponential fit future
+                future_x = np.arange(len(stock_data), len(stock_data) + max(future_horizons.values()))
+                exp_fit_future = exponential_model(future_x, *exp_params)
+
+                # Prepre last point data
+                last_data_point = stock_data.iloc[-1]
+                last_date = last_data_point.name
+                last_value = last_data_point["Close"]
+                last_fitted_value = y_fine_exp[-1]
+                normalized_difference = (last_value - last_fitted_value) / last_value
+
+                # Initialize storage for time range predictions
+                predicted_fits = {}
+                for time_range, offset in time_ranges.items():
+                    # Filter data for each time range
+                    filtered_data = stock_data[stock_data.index >= (datetime.now() - offset)]
+                    if len(filtered_data) > 1:
+                        x_data = np.arange(len(filtered_data))
+                        y_data = filtered_data["Close"].values
+                        std_dev = filtered_data["Close"].std()
+
+                        # Fit linear model for this time range
+                        slope_guess = (y_data[-1] - y_data[0]) / (x_data[-1] - x_data[0]) if len(x_data) > 1 else 0.0
+                        baseline_guess = y_data[0]
+                        linear_params = fit_stock_data(x_data, y_data, "linear", [slope_guess, baseline_guess])
+
+                        if linear_params is not None and len(linear_params) > 0:
+                            # Fit two sinusoids
+                            sinusoidal_params = fit_two_sinusoids_fixed_linear(x_data, y_data, std_dev, linear_params)
+                            if sinusoidal_params is not None and len(sinusoidal_params) > 0:
+                                if time_range not in future_horizons:
+                                    st.error(f"Time range '{time_range}' is missing from future_horizons.")
+                                    continue
+                                future_x = np.arange(len(x_data), len(x_data) + future_horizons[time_range])
+                                predicted_fit = sinusoidal_model_fixed_linear(future_x, *sinusoidal_params, *linear_params)
+                                predicted_fits[f"predicted_{time_range.replace(' ', '_').lower()}"] = (
+                                    predicted_fit if predicted_fit is not None else np.full(future_horizons[time_range], np.nan)
+                                )
+
+                ######## Debugging and verification ###########
+                if not predicted_fits:
+                    st.warning(f"No predictions generated for {stock_name} ({stock_symbol}).")
+
+                # Verify all expected keys
+                expected_time_ranges = [f"predicted_{time_range.replace(' ', '_').lower()}" for time_range in time_ranges]
+                for key in expected_time_ranges:
+                    if key not in predicted_fits:
+                        st.warning(f"Prediction for {key} is missing. Filling with NaN.")
+                        predicted_fits[key] = np.full(future_horizons[key.split('_')[-1].replace('_', ' ').capitalize()], np.nan)
+
+                # Verify exponential fit
+                if "exp_fit_future" not in locals() or exp_fit_future is None:
+                    st.warning(f"Exponential fit future missing for {stock_name} ({stock_symbol}). Filling with NaN.")
+                    exp_fit_future = np.full(max(future_horizons.values()), np.nan)
+
+                ######### Debugging ends ###########
+
+                # Store stock information in dictionary
+
                 stock_info_dict[stock_symbol] = {
                     "stock_name": stock_name,
                     "stock_data": stock_data,
                     "exp_params": exp_params,
+                    "exp_fit_future": exp_fit_future,
                     "stock_symbol": stock_symbol,
                     "start_point_exp": start_point_exp,
                     "dates_fine_exp": pd.to_datetime(dates_fine_exp),
                     "y_fine_exp": y_fine_exp,
-                    "last_date": last_date.strftime("%Y-%m-%d"),
                     "last_value": last_value,
                     "last_fitted_value": last_fitted_value,
                     "normalized_difference": normalized_difference,
+                    "last_date": last_date.strftime("%Y-%m-%d"), 
+                    "predicted_fits": predicted_fits,
                 }
+
             else:
                 st.warning(f"Could not fit exponential model for {stock_name}.")
         else:
@@ -391,10 +708,8 @@ for stock_name, stock_symbol in stocks.items():
     else:
         st.error(f"No stock data available for {stock_name}.")
 
-# Classification for full range (exponential)
 buy_stocks_full, wait_stocks_full, sell_stocks_full = classify_stocks_exponential(stock_info_dict)
 
-# Time offsets for other tabs
 time_offsets = {
     "1 Year": pd.DateOffset(years=1),
     "6 Months": pd.DateOffset(months=6),
@@ -403,58 +718,129 @@ time_offsets = {
     "1 Week": pd.DateOffset(weeks=1),
 }
 
-# Classification for each timeframe using linear fit
 classifications = {}
 for name, offset in time_offsets.items():
     classifications[name] = classify_stocks_linear(stock_info_dict, offset)
 
-# Create tabs
-tabs = st.tabs(["Full Range", "1 Year", "6 Months", "3 Months", "1 Month", "1 Week"])
+tabs = st.tabs(["Full Range", "1 Year", "6 Months", "3 Months", "1 Month", "1 Week", "Predictions", "Overall"])
 
-# Full range tab: show stocks as per exponential difference classification
 with tabs[0]:
-    # Show buy_stocks_full
-    st.write("#### Below the fit")
+    st.subheader("_Below the fit_")
     for _, stock_symbol in buy_stocks_full:
         info = stock_info_dict[stock_symbol]
         with st.container(border=True):
             plot_full_range_stock(info)
 
-    st.write("#### Below the fit")
+    st.subheader("_Equilibrated_")
     for _, stock_symbol in wait_stocks_full:
         info = stock_info_dict[stock_symbol]
         with st.container(border=True):
             plot_full_range_stock(info)
 
-    st.write("#### Below the fit")
+    st.subheader("_Above the fit_")
     for _, stock_symbol in sell_stocks_full:
         info = stock_info_dict[stock_symbol]
         with st.container(border=True):
             plot_full_range_stock(info)
 
-# For other tabs: show stocks classified by linear difference
 timeframe_names = ["1 Year", "6 Months", "3 Months", "1 Month", "1 Week"]
 for i, tf_name in enumerate(timeframe_names, start=1):
     with tabs[i]:
         buy_stocks_tf, wait_stocks_tf, sell_stocks_tf = classifications[tf_name]
 
-        st.write("#### Below the fit")
+        st.subheader("_Below the fit_")
         for _, stock_symbol in buy_stocks_tf:
             info = stock_info_dict[stock_symbol]
             with st.container(border=True):
                 plot_short_range_stock(info, tf_name, time_offsets[tf_name])
 
-        st.write("#### Equilibrated")
+        st.subheader("_Equilibrated_")
         for _, stock_symbol in wait_stocks_tf:
             info = stock_info_dict[stock_symbol]
             with st.container(border=True):
                 plot_short_range_stock(info, tf_name, time_offsets[tf_name])
 
-        st.write("#### Above the fit")
+        st.subheader("_Above the fit_")
         for _, stock_symbol in sell_stocks_tf:
             info = stock_info_dict[stock_symbol]
             with st.container(border=True):
                 plot_short_range_stock(info, tf_name, time_offsets[tf_name])
+
+with tabs[6]:  # Predictions tab
+    for stock_symbol, info in stock_info_dict.items():
+        # Compute or retrieve the linear fit parameters
+        stock_data = info["stock_data"]
+        x_data = np.arange(len(stock_data))
+        y_data = stock_data["Close"].values
+
+        # Compute linear fit parameters if not available
+        slope_guess = (y_data[-1] - y_data[0]) / (x_data[-1] - x_data[0]) if len(x_data) > 1 else 0.0
+        baseline_guess = y_data[0]
+        linear_params = fit_stock_data(x_data, y_data, "linear", [slope_guess, baseline_guess])
+
+        if linear_params is None:
+            st.warning(f"Could not compute linear fit for {info['stock_name']} ({stock_symbol}). Skipping prediction.")
+            continue
+
+        # Pass linear_params to the prediction chart
+        with st.container(border=True):
+            st.subheader(f"{info['stock_name']} ({stock_symbol})")
+            plot_prediction_chart(info["stock_data"], stock_symbol, info['stock_name'])
+
+with tabs[7]:  # Overall tab
+    st.write("### Overall Predictions")
+
+    # All intervals needed for weighting
+    time_ranges = ["1 Year", "6 Months", "3 Months", "1 Month", "2 Weeks"]
+
+    for stock_symbol, info in stock_info_dict.items():
+        # Prepare final predictions
+        final_preds = prepare_predictions_for_stock(info, time_ranges)
+
+        with st.container(border=True):
+            st.subheader(f"{info['stock_name']} ({stock_symbol})")
+            with st.expander("Weighted Average Predictions"):
+                # Plot 2 Weeks Prediction
+                fig, ax = plt.subplots()
+                fig.patch.set_facecolor('black')
+                ax.set_facecolor('black')
+                ax.plot(final_preds["2 Weeks"], label="2 Weeks Prediction", color='yellow')
+                ax.set_title(f"{stock_symbol} - 2 Weeks Prediction", color='white')
+                ax.set_xlabel("Days", color='white')
+                ax.set_ylabel("Price (USD)", color='white')
+                ax.tick_params(axis='x', colors='white')
+                ax.tick_params(axis='y', colors='white')
+                ax.grid(color='gray', alpha=0.5)
+                st.pyplot(fig)
+                plt.close(fig)
+
+                # Plot 3 Months Prediction
+                fig, ax = plt.subplots()
+                fig.patch.set_facecolor('black')
+                ax.set_facecolor('black')
+                ax.plot(final_preds["3 Months"], label="3 Months Prediction", color='green')
+                ax.set_title(f"{stock_symbol} - 3 Months Prediction", color='white')
+                ax.set_xlabel("Days", color='white')
+                ax.set_ylabel("Price (USD)", color='white')
+                ax.tick_params(axis='x', colors='white')
+                ax.tick_params(axis='y', colors='white')
+                ax.grid(color='gray', alpha=0.5)
+                st.pyplot(fig)
+                plt.close(fig)
+
+                # Plot 1 Year Prediction
+                fig, ax = plt.subplots()
+                fig.patch.set_facecolor('black')
+                ax.set_facecolor('black')
+                ax.plot(final_preds["1 Year"], label="1 Year Prediction", color='blue')
+                ax.set_title(f"{stock_symbol} - 1 Year Prediction", color='white')
+                ax.set_xlabel("Days", color='white')
+                ax.set_ylabel("Price (USD)", color='white')
+                ax.tick_params(axis='x', colors='white')
+                ax.tick_params(axis='y', colors='white')
+                ax.grid(color='gray', alpha=0.5)
+                st.pyplot(fig)
+                plt.close(fig)
 
 st.subheader("Disclaimer")
 st.write("""
