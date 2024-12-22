@@ -774,7 +774,7 @@ classifications = {}
 for name, offset in time_offsets.items():
     classifications[name] = classify_stocks_linear(stock_info_dict, offset)
 
-tabs = st.tabs(["Full Range", "1 Year", "6 Months", "3 Months", "1 Month", "2 Weeks", "Predictions", "Overall"])
+tabs = st.tabs(["Full Range", "1 Year", "6 Months", "3 Months", "1 Month", "2 Weeks", "Sinusoidal", "Overall"])
 
 with tabs[0]:
     st.subheader("_Below the exponential fit_")
