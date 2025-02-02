@@ -35,7 +35,10 @@ db = firestore.client()
 TWELVE_DATA_API_KEY = st.secrets["twelve_data"]["api_key"]
 
 if "stock_data" not in st.session_state:
-    st.session_state.stock_data = {}
+    st.session_state.stock_data = {
+        "df": pd.DataFrame(),
+        "last_updated": None
+    }
 
 stocks = {
     "NVIDIA": "NVDA",
@@ -236,8 +239,7 @@ def plot_full_range_stock(info):
     st.pyplot(fig_full)
     plt.close(fig_full)
 
-    st.write(f"**Last data point:** {info['last_date']}  - **Close (Open) Value:** {info['last_value']:.2f}")
-    st.write(f"**Data last updated:** {info['last_updated']} (New York Time)")
+    st.write(f"**Last data point:** {info['last_updated']} (New York Time) - **Close (Open) Value:** {info['last_value']:.2f}")
 
     if info.get("last_fitted_value") is not None:
         st.write(f"**Last fitted value:** {info['last_fitted_value']:.2f}")
@@ -378,7 +380,9 @@ for stock_name, stock_symbol in stocks.items():
             "last_updated": last_updated
         }
 
-    stock_data = st.session_state.stock_data[stock_symbol]
+    stock_data_info = st.session_state.stock_data[stock_symbol]
+    stock_data = stock_data_info["df"]  # Get the DataFrame from the dict
+    last_updated = stock_data_info["last_updated"]  # Get the timestamp
 
     if not stock_data.empty:
         stock_data['Close'] = stock_data['Close'].fillna(stock_data['Open'])

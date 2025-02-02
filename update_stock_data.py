@@ -101,7 +101,7 @@ def update_stock_data(symbol, api_key):
 
         # Get current Eastern Time
         est = pytz.timezone('US/Eastern')
-        current_time = datetime.now(est).strftime('%Y-%m-%d %H:%M:%S')
+        current_time = datetime.now(est).strftime('%Y-%m-%d %H:%M')
 
         # Store JSON data in Firestore
         stock_doc_ref.set({
