@@ -5,28 +5,28 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 import time
-from datetime import datetime, time
+from datetime import datetime, time as dt_time
 import pytz  # if you need timezone conversions
 
 # --- Load environment variables from .env file To run locally ---
 #region
-#from dotenv import load_dotenv  # To run locally
+from dotenv import load_dotenv  # To run locally
 
 # Load environment variables from .env file
-#load_dotenv()  # To run locally
+load_dotenv()  # To run locally
 
 # Debug
-#print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
-#print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
-#print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
+print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
+print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
+print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
 #endregion
 
 
 # Define market windows (these are just examples)
-MARKET_OPEN = time(9, 30)
-MARKET_CLOSE = time(16, 0)
-PRE_MARKET_START = time(7, 0)
-AFTER_HOURS_END = time(20, 0)
+MARKET_OPEN = dt_time(9, 30)
+MARKET_CLOSE = dt_time(16, 0)
+PRE_MARKET_START = dt_time(7, 0)
+AFTER_HOURS_END = dt_time(20, 0)
 
 # Get current EST time (assuming the server is not in EST)
 est = pytz.timezone('US/Eastern')
@@ -72,6 +72,13 @@ def update_stock_data(symbol, api_key):
     data = response.json()
 
     if "values" in data:
+
+        #debugging
+        for i, item in enumerate(data["values"]):
+            if i >= 5:
+                break
+            print(item)
+
         values = data["values"]
         df = pd.DataFrame(values)
         df = df.rename(columns={
@@ -87,7 +94,7 @@ def update_stock_data(symbol, api_key):
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values(by="Date")
         df = df.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name != 'Date' else x)
-        df["Date"] = df["Date"].dt.strftime('%Y-%m-%d')  # Convert Date back to string format
+        df["Date"] = df["Date"].dt.strftime('%Y-%m-%d %H:%M:%S')  # Convert Date and time back to string format
 
         # Convert DataFrame to JSON format
         data_json = df.to_json(orient="records")

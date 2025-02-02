@@ -235,7 +235,7 @@ def plot_full_range_stock(info):
     st.pyplot(fig_full)
     plt.close(fig_full)
 
-    st.write(f"**Last data point:** {info['last_date']}  - **Close (Open) Value:** {info['last_value']:.2f}")
+    st.write(f"**Last data point:** {info['last_date']} (New York time)  - **Close (Open) Value:** {info['last_value']:.2f}")
     if info.get("last_fitted_value") is not None:
         st.write(f"**Last fitted value:** {info['last_fitted_value']:.2f}")
     else:
@@ -428,7 +428,7 @@ for stock_name, stock_symbol in stocks.items():
             "stock_data": stock_data,
             **exp_fields,
             "last_value": last_value,
-            "last_date": last_date.strftime("%Y-%m-%d"),
+            "last_date": last_date.strftime('%Y-%m-%d %H:%M:%S'),
         }
     else:
         st.error(f"No stock data available for {stock_name}.")
