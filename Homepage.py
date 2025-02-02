@@ -129,13 +129,14 @@ def get_stock_data_from_firebase(symbol):
     doc = stock_doc_ref.get()
     if doc.exists:
         json_data = doc.to_dict().get("data", "")
+        last_updated = doc.to_dict().get("last_updated", "N/A")  # Get timestamp
         if json_data:
             data = json.loads(json_data)
             df = pd.DataFrame(data)
             df["Date"] = pd.to_datetime(df["Date"])
             df.set_index("Date", inplace=True)
             df = df.sort_index()
-            return df
+            return df, last_updated
     return pd.DataFrame()
 
 def classify_stocks_exponential(stock_info_dict):
@@ -235,7 +236,9 @@ def plot_full_range_stock(info):
     st.pyplot(fig_full)
     plt.close(fig_full)
 
-    st.write(f"**Last data point:** {info['last_date']} (New York time)  - **Close (Open) Value:** {info['last_value']:.2f}")
+    st.write(f"**Last data point:** {info['last_date']}  - **Close (Open) Value:** {info['last_value']:.2f}")
+    st.write(f"**Data last updated:** {info['last_updated']} (New York Time)")
+
     if info.get("last_fitted_value") is not None:
         st.write(f"**Last fitted value:** {info['last_fitted_value']:.2f}")
     else:
@@ -340,6 +343,7 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         last_close = filtered_data["Close"].iloc[-1]
         st.write(f"**Normalized Difference:** {(last_close - y_fine_linear[-1]) / last_close:.2%}")
         st.write(f"**Last closing price:** {last_close:.2f}")
+        st.write(f"**Data last updated:** {info['last_updated']} (New York Time)")
         st.markdown(
             f"**Estimated Next High Value:** <span style='color:green;'> {estimated_high:.2f}</span> ({P_high:.2f}% probability)",
             unsafe_allow_html=True
@@ -368,7 +372,11 @@ time_ranges = {
 
 for stock_name, stock_symbol in stocks.items():
     if stock_symbol not in st.session_state.stock_data:
-        st.session_state.stock_data[stock_symbol] = get_stock_data_from_firebase(stock_symbol)
+        df, last_updated = get_stock_data_from_firebase(stock_symbol)
+        st.session_state.stock_data[stock_symbol] = {
+            "df": df,
+            "last_updated": last_updated
+        }
 
     stock_data = st.session_state.stock_data[stock_symbol]
 
@@ -428,7 +436,8 @@ for stock_name, stock_symbol in stocks.items():
             "stock_data": stock_data,
             **exp_fields,
             "last_value": last_value,
-            "last_date": last_date.strftime('%Y-%m-%d %H:%M:%S'),
+            "last_date": last_date.strftime('%Y-%m-%d'),
+            "last_updated": last_updated,
         }
     else:
         st.error(f"No stock data available for {stock_name}.")

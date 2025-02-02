@@ -10,15 +10,15 @@ import pytz  # if you need timezone conversions
 
 # --- Load environment variables from .env file To run locally ---
 #region
-from dotenv import load_dotenv  # To run locally
+#from dotenv import load_dotenv  # To run locally
 
 # Load environment variables from .env file
-load_dotenv()  # To run locally
+#load_dotenv()  # To run locally
 
 # Debug
-print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
-print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
-print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
+#print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
+#print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
+#print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
 #endregion
 
 
@@ -74,10 +74,10 @@ def update_stock_data(symbol, api_key):
     if "values" in data:
 
         #debugging
-        for i, item in enumerate(data["values"]):
-            if i >= 5:
-                break
-            print(item)
+        #for i, item in enumerate(data["values"]):
+            #if i >= 5:
+                #break
+            #print(item)
 
         values = data["values"]
         df = pd.DataFrame(values)
@@ -94,13 +94,20 @@ def update_stock_data(symbol, api_key):
         df["Date"] = pd.to_datetime(df["Date"])
         df = df.sort_values(by="Date")
         df = df.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name != 'Date' else x)
-        df["Date"] = df["Date"].dt.strftime('%Y-%m-%d %H:%M:%S')  # Convert Date and time back to string format
+        df["Date"] = df["Date"].dt.strftime('%Y-%m-%d')  # Convert Date and time back to string format
 
         # Convert DataFrame to JSON format
         data_json = df.to_json(orient="records")
 
+        # Get current Eastern Time
+        est = pytz.timezone('US/Eastern')
+        current_time = datetime.now(est).strftime('%Y-%m-%d %H:%M:%S')
+
         # Store JSON data in Firestore
-        stock_doc_ref.set({"data": data_json})
+        stock_doc_ref.set({
+            "data": data_json,
+            "last_updated": current_time # Store the current time of update
+            })
     else:
         print(f"Error retrieving data for {symbol}. Response: {data}")
 
