@@ -5,16 +5,37 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 import json
 import time
-from datetime import datetime
+from datetime import datetime, time
+import pytz  # if you need timezone conversions
+
+# --- Load environment variables from .env file To run locally ---
+#region
 #from dotenv import load_dotenv  # To run locally
 
 # Load environment variables from .env file
 #load_dotenv()  # To run locally
 
 # Debug
-print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
-print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
-print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
+#print("FIREBASE_PROJECT_ID:", os.getenv("FIREBASE_PROJECT_ID"))
+#print("FIREBASE_CLIENT_EMAIL:", os.getenv("FIREBASE_CLIENT_EMAIL"))
+#print("FIREBASE_PRIVATE_KEY exists:", os.getenv("FIREBASE_PRIVATE_KEY"))
+#endregion
+
+
+# Define market windows (these are just examples)
+MARKET_OPEN = time(9, 30)
+MARKET_CLOSE = time(16, 0)
+PRE_MARKET_START = time(7, 0)
+AFTER_HOURS_END = time(20, 0)
+
+# Get current EST time (assuming the server is not in EST)
+est = pytz.timezone('US/Eastern')
+now_est = datetime.now(est).time()
+
+# Check if current time is within any of the desired update windows.
+if not ((PRE_MARKET_START <= now_est <= AFTER_HOURS_END)):
+    print("Market is closed. Skipping update for now.")
+    exit(0)
 
 # Access Firebase credentials from environment variables
 if not firebase_admin._apps:
@@ -79,7 +100,7 @@ def update_stock_data(symbol, api_key):
 # Update the list of stocks
 stocks = {
     "NVIDIA": "NVDA",
-    "Advanced Micro Devices": "AMD",
+    #"Advanced Micro Devices": "AMD",
     "Micron Technology": "MU",
     "Astera Labs Inc": "ALAB",
     "Arm": "ARM",
@@ -92,7 +113,7 @@ stocks = {
     "Gartner": "IT",
     "Oracle": "ORCL",
     "Service now": "NOW",
-    "Applied Materials": "AMAT",
+    #"Applied Materials": "AMAT",
     "Arista": "ANET",
     "Cadence Design Systems": "CDNS",
     "Progress Software": "PRGS",
