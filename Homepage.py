@@ -10,6 +10,7 @@ from scipy.optimize import curve_fit
 import numpy as np
 from scipy.interpolate import interp1d
 from scipy.stats import norm
+import time
 
 #### Initializing variables ####
 #region
@@ -87,7 +88,9 @@ def fit_stock_data(x_data, y_data, model_name, p0):
         params, _ = curve_fit(model, x_data, y_data, p0=p0, maxfev=2000)
         return params
     except RuntimeError as e:
-        st.warning(f"An error occurred during fitting ({model_name}): {e}")
+        #alert = st.warning(f"An error occurred during fitting ({model_name}): {e}")
+        #time.sleep(3)
+        #alert.empty()
         return None
 
 @st.cache_data
@@ -141,7 +144,8 @@ def classify_stocks_exponential(stock_info_dict):
     sell_stocks = []
 
     for stock_symbol, info in stock_info_dict.items():
-        normalized_difference = info["normalized_difference"]
+        # If exponential fit failed, normalized_difference is set to 0.
+        normalized_difference = info.get("normalized_difference", 0)
         abs_diff = abs(normalized_difference)
         if abs_diff < 0.04:
             wait_stocks.append((abs_diff, stock_symbol))
@@ -203,8 +207,6 @@ def classify_stocks_linear(stock_info_dict, time_offset):
 def plot_full_range_stock(info):
     stock_name = info["stock_name"]
     stock_data = info["stock_data"]
-    dates_fine_exp = info["dates_fine_exp"]
-    y_fine_exp = info["y_fine_exp"]
     stock_symbol = info["stock_symbol"]
 
     st.write(f"### {stock_name} ({stock_symbol}) Stock Price - Full Range")
@@ -213,9 +215,15 @@ def plot_full_range_stock(info):
     fig_full.patch.set_facecolor('black')
     ax_full.set_facecolor('black')
     ax_full.plot(stock_data.index, stock_data["Close"], label="Close Price")
-    # Exponential fit (full range)
-    mask_full = (dates_fine_exp >= stock_data.index.min()) & (dates_fine_exp <= stock_data.index.max())
-    ax_full.plot(dates_fine_exp[mask_full], y_fine_exp[mask_full], label="Exponential Fit", color='white', linestyle=':')
+
+    # Plot exponential fit if available
+    dates_fine_exp = info.get("dates_fine_exp")
+    y_fine_exp = info.get("y_fine_exp")
+    if dates_fine_exp is not None and y_fine_exp is not None and len(dates_fine_exp) > 0:
+        mask_full = (dates_fine_exp >= stock_data.index.min()) & (dates_fine_exp <= stock_data.index.max())
+        ax_full.plot(dates_fine_exp[mask_full], y_fine_exp[mask_full], label="Exponential Fit", color='white', linestyle=':')
+    else:
+        st.warning(f"Exponential fit not available for {stock_name}.")
 
     ax_full.set_xlabel("Date", color='white')
     ax_full.set_ylabel("Price (USD)", color='white')
@@ -227,16 +235,18 @@ def plot_full_range_stock(info):
     st.pyplot(fig_full)
     plt.close(fig_full)
 
-    # Display last data point info (rounded)
     st.write(f"**Last data point:** {info['last_date']}  - **Close (Open) Value:** {info['last_value']:.2f}")
-    st.write(f"**Last fitted value:** {info['last_fitted_value']:.2f}")
-    st.write(f"**Normalized Difference:** {info['normalized_difference']:.2%}")
+    if info.get("last_fitted_value") is not None:
+        st.write(f"**Last fitted value:** {info['last_fitted_value']:.2f}")
+    else:
+        st.write("**Exponential fit was not available.**")
+    if info.get("normalized_difference") is not None:
+        st.write(f"**Normalized Difference:** {info['normalized_difference']:.2%}")
+
 
 def plot_short_range_stock(info, time_offset_name, time_offset):
     stock_name = info["stock_name"]
     stock_data = info["stock_data"]
-    dates_fine_exp = info.get("dates_fine_exp", np.array([]))
-    y_fine_exp = info.get("y_fine_exp", np.array([]))
     stock_symbol = info["stock_symbol"]
 
     st.write(f"### {stock_name} ({stock_symbol}) Stock Price - {time_offset_name}")
@@ -251,25 +261,17 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
     # Plot Close Price
     ax.plot(filtered_data.index, filtered_data["Close"], label="Close Price")
 
-    # Plot Exponential Fit
-    if not filtered_data.empty and len(dates_fine_exp) == len(y_fine_exp):
-        # Create mask to filter dates_fine_exp within the filtered_data range
+    # Plot exponential fit if available
+    dates_fine_exp = info.get("dates_fine_exp", np.array([]))
+    y_fine_exp = info.get("y_fine_exp", np.array([]))
+    if len(dates_fine_exp) and len(y_fine_exp) and len(dates_fine_exp) == len(y_fine_exp):
         mask = (dates_fine_exp >= filtered_data.index.min()) & (dates_fine_exp <= filtered_data.index.max())
-
-        # Filter both dates and y values using the mask
         filtered_dates_exp = dates_fine_exp[mask]
         filtered_y_fine_exp = y_fine_exp[mask]
-
-        # Debug: Output lengths
-        st.write(f"Exponential Fit - Filtered Dates Length: {len(filtered_dates_exp)}")
-        st.write(f"Exponential Fit - Filtered Y Length: {len(filtered_y_fine_exp)}")
-
         if len(filtered_dates_exp) == len(filtered_y_fine_exp):
             ax.plot(filtered_dates_exp, filtered_y_fine_exp, label="Exponential Fit", color='white', alpha=0.75, linestyle=':')
         else:
             st.warning(f"Length mismatch in exponential fit data for {stock_symbol}. Skipping Exponential Fit.")
-    else:
-        st.warning(f"Exponential fit dates and values length mismatch for {stock_symbol} in {time_offset_name}.")
 
     # Plot High/Low
     if not filtered_data.empty:
@@ -278,7 +280,6 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
 
     # Plot Linear Fit and Calculate Residuals
     linear_params = None
-    residuals = None
     if len(filtered_data) > 1:
         x_data = np.arange(len(filtered_data))
         y_data = filtered_data["Close"].values
@@ -287,11 +288,8 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         linear_params = fit_stock_data(x_data, y_data, "linear", [slope_guess, baseline_guess])
 
         if linear_params is not None:
-            # Define two points for the straight line: first and last
             x_start, x_end = x_data[0], x_data[-1]
             y_start, y_end = linear_model(x_start, *linear_params), linear_model(x_end, *linear_params)
-
-            # Plot the straight line
             ax.plot(
                 [filtered_data.index[0], filtered_data.index[-1]],
                 [y_start, y_end],
@@ -299,35 +297,24 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
                 color='yellow',
                 linestyle=':'
             )
-        
-        if linear_params is not None:
             dates_tuple = tuple(filtered_data.index.view('int64'))
             dates_fine_linear, y_fine_linear = generate_smooth_fit_line(
                 x_data, dates_tuple, linear_params, "linear"
             )
-            #ax.plot(dates_fine_linear, y_fine_linear, label="Linear Fit", color='yellow', linestyle=':')
-
-            # Calculate residuals
             y_predicted = linear_model(x_data, *linear_params)
             residuals = y_data - y_predicted
-
-            # Compute standard deviation of residuals
             std_dev_residual = np.std(residuals)
-
-            # Calculate probabilities based on residuals
             if std_dev_residual > 0:
                 estimated_high = y_fine_linear[-1] + (filtered_data["High"].iloc[-1] - y_fine_linear[-1])
                 estimated_low = y_fine_linear[-1] - (y_fine_linear[-1] - filtered_data["Low"].iloc[-1])
-
                 Z_high = (estimated_high - y_fine_linear[-1]) / std_dev_residual
                 Z_low = (estimated_low - y_fine_linear[-1]) / std_dev_residual
-                P_high = (1 - norm.cdf(Z_high)) * 100  # Probability above estimated_high
-                P_low = norm.cdf(Z_low) * 100          # Probability below estimated_low
+                P_high = (1 - norm.cdf(Z_high)) * 100
+                P_low = norm.cdf(Z_low) * 100
             else:
                 P_high = 50.0
                 P_low = 50.0
 
-            # Fill between using residual-based std_dev with two points
             ax.fill_between(
                 [filtered_data.index[0], filtered_data.index[-1]],
                 [y_start - std_dev_residual, y_end - std_dev_residual],
@@ -338,7 +325,6 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
         else:
             st.warning(f"Could not fit linear model for {time_offset_name} in {stock_name}.")
 
-    # Set labels, legend, and style
     ax.set_xlabel("Date", color='white')
     ax.set_ylabel("Price (USD)", color='white')
     ax.grid(True, color='gray')
@@ -350,7 +336,6 @@ def plot_short_range_stock(info, time_offset_name, time_offset):
     st.pyplot(fig)
     plt.close(fig)
 
-    # Display last data point info
     if not filtered_data.empty and linear_params is not None:
         last_close = filtered_data["Close"].iloc[-1]
         st.write(f"**Normalized Difference:** {(last_close - y_fine_linear[-1]) / last_close:.2%}")
@@ -389,62 +374,62 @@ for stock_name, stock_symbol in stocks.items():
 
     if not stock_data.empty:
         stock_data['Close'] = stock_data['Close'].fillna(stock_data['Open'])
+        last_data_point = stock_data.iloc[-1]
+        last_date = last_data_point.name
+        last_value = last_data_point["Close"]
+
+        # Default values in case exponential fit fails
+        exp_fields = {
+            "exp_params": None,
+            "dates_fine_exp": np.array([]),
+            "y_fine_exp": np.array([]),
+            "exp_fit_future": np.array([]),
+            "exp_adjustment": None,
+            "last_fitted_value": None,
+            "normalized_difference": 0
+        }
 
         exp_initial_params, start_point_exp = get_fitting_params(stock_symbol, "exponential")
         if exp_initial_params:
-
-            # Generate exponential fit
             full_x_data = np.arange(len(stock_data))
             full_y_data = stock_data["Close"].values
-
             x_data_exp = full_x_data[start_point_exp:]
             y_data_exp = full_y_data[start_point_exp:]
             dates_tuple = tuple(stock_data.index[start_point_exp:].view('int64'))
             exp_params = fit_stock_data(x_data_exp, y_data_exp, "exponential", exp_initial_params)
-
             if exp_params is not None:
-                # Initialize session state for predictions
-                if stock_symbol not in st.session_state:
-                    st.session_state[stock_symbol] = {"predictions": {}}
-
                 dates_fine_exp, y_fine_exp = generate_smooth_fit_line(
                     x_data_exp, dates_tuple, exp_params, "exponential"
                 )
-
-                # Prepare last point data
-                last_data_point = stock_data.iloc[-1]
-                last_date = last_data_point.name
-                last_value = last_data_point["Close"]
                 last_fitted_value = y_fine_exp[-1]
                 normalized_difference = (last_value - last_fitted_value) / last_value
-
-                # Calculate exponential adjustment
                 exp_adjustment = last_value - last_fitted_value
-
-                # Prepare exponential fit future
                 future_x = np.arange(len(stock_data), len(stock_data) + 365)
                 exp_fit_future = exponential_model(future_x, *exp_params) + exp_adjustment
 
-                # Store all information in stock_info_dict
-                stock_info_dict[stock_symbol] = {
-                    "stock_name": stock_name,
-                    "stock_symbol": stock_symbol,
-                    "stock_data": stock_data,
+                exp_fields = {
                     "exp_params": exp_params,
                     "dates_fine_exp": dates_fine_exp,
                     "y_fine_exp": y_fine_exp,
                     "exp_fit_future": exp_fit_future,
                     "exp_adjustment": exp_adjustment,
-                    "last_value": last_value,
                     "last_fitted_value": last_fitted_value,
-                    "normalized_difference": normalized_difference,
-                    "last_date": last_date.strftime("%Y-%m-%d"),
+                    "normalized_difference": normalized_difference
                 }
-
             else:
-                st.warning(f"Could not fit exponential model for {stock_name}.")
+                st.toast(f"Could not fit exponential model for {stock_name}. Showing stock without exponential fit.")
         else:
-            st.warning(f"No exponential fitting parameters found for {stock_name}.")
+            st.toast(f"No exponential fitting parameters found for {stock_name}. Showing stock without exponential fit.")
+
+        # Always store stock info, even if exponential fit failed.
+        stock_info_dict[stock_symbol] = {
+            "stock_name": stock_name,
+            "stock_symbol": stock_symbol,
+            "stock_data": stock_data,
+            **exp_fields,
+            "last_value": last_value,
+            "last_date": last_date.strftime("%Y-%m-%d"),
+        }
     else:
         st.error(f"No stock data available for {stock_name}.")
 
